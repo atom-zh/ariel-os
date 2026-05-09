@@ -1,0 +1,14 @@
+version: 0.3.0
+targets:
+  st-stm32f427vg:
+    chip: stm32f427vg
+    ariel:
+      swi: USART1
+    leds:
+      led0:
+        pin: PE9
+        color: green
+        active: high
+    buttons:
+      button0:
+        pin: PC13

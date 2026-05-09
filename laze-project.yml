@@ -599,6 +599,20 @@ contexts:
     env:
       PROBE_RS_CHIP: STM32F411RE
 
+  - name: stm32f427vg
+    parent: stm32
+    selects:
+      - cortex-m4f
+    provides:
+      - has_hwrng
+    env:
+      PROBE_RS_CHIP: STM32F427VGTx
+      RUSTFLAGS:
+        - --cfg capability="async-flash-driver"
+        - --cfg capability="hw/stm32-usb-synopsys"
+        - --cfg capability="hw/stm32-rng"
+        - --cfg use_stm32_single_bank
+
   - name: stm32f767zi
     parent: stm32
     selects:
@@ -1119,30 +1133,35 @@ modules:
       flash-erase-all:
         help: Erases the whole chip including user data. Unlocks it if locked.
         build: false
+        workdir: ${project-root}
         cmd:
-          - probe-rs erase --chip ${PROBE_RS_CHIP} --allow-erase-all $@
+          - probe-rs erase --chip ${PROBE_RS_CHIP} --allow-erase-all
 
       flash:
         help: Flashes the target using probe-rs
+        workdir: ${project-root}
         cmd:
-          - probe-rs download --chip ${PROBE_RS_CHIP} ${out} $@
+          - probe-rs download --chip ${PROBE_RS_CHIP} ${project-root}/${out}
           - probe-rs reset --chip ${PROBE_RS_CHIP}
 
       attach:
         help: Attach probe-rs to rtt logging
         build: false
+        workdir: ${project-root}
         cmd:
-          - probe-rs attach --chip ${PROBE_RS_CHIP} ${out} $@
+          - probe-rs attach --chip ${PROBE_RS_CHIP} ${project-root}/${out}
 
       debug:
         help: Starts a probe-rs gdb server
+        workdir: ${project-root}
         cmd:
-          - probe-rs gdb --chip ${PROBE_RS_CHIP} $@
+          - probe-rs gdb --chip ${PROBE_RS_CHIP}
 
       reset:
         help: Resets the target
+        workdir: ${project-root}
         cmd:
-          - probe-rs reset --chip ${PROBE_RS_CHIP} $@
+          - probe-rs reset --chip ${PROBE_RS_CHIP}
 
   - name: openocd
     selects:

@@ -68,6 +68,7 @@ pub fn main() {
     println!("cargo::rustc-check-cfg=cfg(context, values(\"st-nucleo-f303re\"))");
     println!("cargo::rustc-check-cfg=cfg(context, values(\"st-nucleo-f401re\"))");
     println!("cargo::rustc-check-cfg=cfg(context, values(\"st-nucleo-f411re\"))");
+    println!("cargo::rustc-check-cfg=cfg(context, values(\"st-stm32f427vg\"))");
     println!("cargo::rustc-check-cfg=cfg(context, values(\"st-nucleo-f767zi\"))");
     println!("cargo::rustc-check-cfg=cfg(context, values(\"st-nucleo-h753zi\"))");
     println!("cargo::rustc-check-cfg=cfg(context, values(\"st-nucleo-h755zi-q\"))");

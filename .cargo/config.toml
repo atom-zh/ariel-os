@@ -1,5 +1,12 @@
 include = ["../ariel-os-cargo.toml"]
 
+[net]
+git-fetch-with-cli = true
+retry = 5
+
+[http]
+timeout = 120
+
 [unstable]
 # This is needed for cbindgen to work in no_std cross compiles.
 features = ['all']

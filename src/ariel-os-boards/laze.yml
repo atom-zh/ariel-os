@@ -222,6 +222,51 @@ builders:
   env:
     CARGO_ENV:
     - CONFIG_SWI=USART2
+- name: st-stm32f427vg
+  parent: stm32f427vg
+  provides:
+  - has_buttons
+  - has_leds
+  - has_swi
+  env:
+    CARGO_ENV:
+    - CONFIG_SWI=USART1
+  rules:
+  - name: LINK
+    description: CARGO ${out}
+    pool: console
+    always: true
+    cmd: >-
+      powershell -NoProfile -ExecutionPolicy Bypass -File ${root}/scripts/laze-cargo-build.ps1
+      -ManifestDir ${relpath}
+      -Profile ${PROFILE}
+      -Features "${FEATURES}"
+      -Target ${RUSTC_TARGET}
+      -TargetDir ${build-dir}/bin/${builder}/cargo
+      -Board ${builder}
+      -OpenOcdArgs "${OPENOCD_ARGS}"
+      -ScriptsDir ${SCRIPTS}
+      -ExecutorStacksize ${CONFIG_EXECUTOR_STACKSIZE}
+      -IsrStacksize ${CONFIG_ISR_STACKSIZE}
+      -Swi USART1
+      -DefmtLog "info,${LOG}"
+      -LogLevel "${LOG}"
+      -HeapSize "${heapsize_required}"
+      -Cc "${CC}"
+      -Cflags "${CFLAGS}"
+      -PeersYml "${PEERS_YML}"
+  tasks:
+    run:
+      help: Flash firmware and stream RTT output using probe-rs
+      workdir: ${project-root}
+      cmd:
+        - probe-rs run --protocol=swd --chip STM32F427VGTx --preverify ${project-root}/${out}
+
+    flash-attach:
+      help: Flash firmware and then attach to RTT output
+      workdir: ${project-root}
+      cmd:
+        - probe-rs run --protocol=swd --chip STM32F427VGTx --preverify ${project-root}/${out}
 - name: st-nucleo-f767zi
   parent: stm32f767zi
   provides:
