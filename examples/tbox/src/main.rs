@@ -2,12 +2,14 @@
 #![no_std]
 
 use ariel_os::{
-    debug::{ExitCode, exit},
     log::*,
+    time::Timer,
 };
 
 #[ariel_os::task(autostart)]
 async fn main() {
-    info!("Hello World!");
-    exit(ExitCode::SUCCESS);
+    loop {
+        info!("Hello World!");
+        Timer::after_secs(1).await;
+    }
 }

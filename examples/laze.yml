@@ -4,6 +4,7 @@ defaults:
       - ariel-os
 
 subdirs:
+  - tbox
   - alloc
   - benchmark
   - ble-advertiser

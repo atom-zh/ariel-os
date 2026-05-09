@@ -1,4 +1,26 @@
 {
+  "rust-analyzer.linkedProjects": [
+    "Cargo.toml"
+  ],
+  "rust-analyzer.cargo.target": "thumbv7em-none-eabihf",
+  "rust-analyzer.cargo.allTargets": false,
+  "rust-analyzer.cargo.features": [
+    "time"
+  ],
+  "rust-analyzer.cargo.cfgs": [
+    "context=\"embedded\"",
+    "context=\"cortex-m\"",
+    "context=\"armv7em\"",
+    "context=\"cortex-m4f\"",
+    "context=\"stm32\"",
+    "context=\"stm32f427vg\"",
+    "context=\"st-stm32f427vg\"",
+    "context=\"single-core\"",
+    "capability=\"async-flash-driver\"",
+    "capability=\"hw/stm32-usb-synopsys\"",
+    "capability=\"hw/stm32-rng\"",
+    "use_stm32_single_bank"
+  ],
   "C_Cpp_Runner.cCompilerPath": "gcc",
   "C_Cpp_Runner.cppCompilerPath": "g++",
   "C_Cpp_Runner.debuggerPath": "gdb",
