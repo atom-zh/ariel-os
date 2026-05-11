@@ -10,7 +10,8 @@
 				"examples/tbox",
 				"build",
 				"-b",
-				"st-stm32f427vg"
+				"st-stm32f427vg",
+				"flash-attach"
 			],
 			"isBackground": false
 		}
