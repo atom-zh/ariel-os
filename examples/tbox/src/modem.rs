@@ -26,8 +26,13 @@ const SERIAL_LOG_PREVIEW: usize = 48;
 const DEFAULT_SOCKET_HOST: &str = "47.103.151.216";
 const DEFAULT_SOCKET_PORT: u16 = 8089;
 const TCP_CONNECT_TIMEOUT_SECS: u64 = 30;
-const TCP_IO_TIMEOUT_SECS: u64 = 2;
-const TCP_SEND_INTERVAL_SECS: u64 = 5;
+const TCP_IO_TIMEOUT_SECS: u64 = 10;
+const TCP_SEND_INTERVAL_MS: u64 = 800;
+const TCP_READ_PROBE_TIMEOUT_MS: u64 = 80;
+const TCP_WRITE_RETRY_MAX: u8 = 3;
+const TCP_WRITE_RETRY_BACKOFF_SECS: u64 = 1;
+const TCP_LONG_MODE_RESET_THRESHOLD: u8 = 3;
+const TCP_SHORT_MODE_HOLD_SENDS: u32 = 20;
 const MODEM_PROBE_TIMEOUT_MS: u64 = 3_000;
 const MODEM_BAUD_SETTLE_MS: u64 = 200;
 const MODEM_DRAIN_TIMEOUT_MS: u64 = 100;
@@ -73,14 +78,14 @@ const SOCKET_PORT: Option<&str> = option_env!("CONFIG_TBOX_SOCKET_PORT");
 const PPP_USERNAME: Option<&str> = option_env!("CONFIG_PPP_USERNAME");
 const PPP_PASSWORD: Option<&str> = option_env!("CONFIG_PPP_PASSWORD");
 
-const DIAL_CANDIDATE_COUNT: u8 = 5;
+const DIAL_CANDIDATE_COUNT: u8 = 3;
 
 fn dial_candidate_by_index(index: u8) -> &'static str {
     match index % DIAL_CANDIDATE_COUNT {
-        0 => "AT+CGDATA=\"PPP\",1",
-        1 => MODEM_DIAL,
-        2 => "ATD*99#",
-        3 => "ATD*99***1#",
+        // 0 => "AT+CGDATA=\"PPP\",1",
+        // 1 => MODEM_DIAL,
+        0 => "ATD*99#",
+        1 => "ATD*99***1#",
         _ => "ATD*98*1#",
     }
 }
@@ -1155,6 +1160,8 @@ async fn socket_demo(stack: Stack<'static>) {
     let mut socket_read_buf = [0u8; 256];
     let mut connect_attempt: u32 = 0;
     let mut message_counter: u64 = 0;
+    let mut early_reset_streak: u8 = 0;
+    let mut short_mode_remaining: u32 = 0;
 
     loop {
         connect_attempt += 1;
@@ -1177,6 +1184,19 @@ async fn socket_demo(stack: Stack<'static>) {
                 );
                 socket.set_timeout(Some(ariel_os::time::Duration::from_secs(TCP_IO_TIMEOUT_SECS)));
 
+                if short_mode_remaining > 0 {
+                    info!(
+                        "TCP adaptive mode: short-connection fallback active (remaining sends: {})",
+                        short_mode_remaining
+                    );
+                } else {
+                    info!("TCP adaptive mode: long-connection preferred");
+                }
+
+                let mut sent_this_connection: u32 = 0;
+                let mut closed_by_reset = false;
+                let mut closed_by_send_failure = false;
+
                 loop {
                     let current_id = message_counter.saturating_add(1);
 
@@ -1192,46 +1212,131 @@ async fn socket_demo(stack: Stack<'static>) {
                     );
                     log_serial_bytes("UART3 PPP TX", payload.as_bytes());
 
-                    if socket.write_all(payload.as_bytes()).await.is_err() {
+                    let mut write_ok = false;
+                    for write_try in 1..=TCP_WRITE_RETRY_MAX {
+                        match socket.write_all(payload.as_bytes()).await {
+                            Ok(()) => {
+                                write_ok = true;
+                                if write_try > 1 {
+                                    info!(
+                                        "TCP send #{} succeeded on retry {}/{}",
+                                        current_id,
+                                        write_try,
+                                        TCP_WRITE_RETRY_MAX
+                                    );
+                                }
+                                break;
+                            }
+                            Err(err) => {
+                                warn!(
+                                    "TCP send #{} write attempt {}/{} failed: {:?}",
+                                    current_id,
+                                    write_try,
+                                    TCP_WRITE_RETRY_MAX,
+                                    Debug2Format(&err)
+                                );
+                                if write_try < TCP_WRITE_RETRY_MAX {
+                                    Timer::after_secs(TCP_WRITE_RETRY_BACKOFF_SECS).await;
+                                }
+                            }
+                        }
+                    }
+
+                    if !write_ok {
                         warn!(
-                            "TCP send #{} failed before commit (last committed #{}) , reconnecting",
+                            "TCP send #{} failed before commit (last committed #{}), reconnecting",
                             current_id,
                             message_counter,
                         );
+                        closed_by_send_failure = true;
                         break;
                     }
 
                     message_counter = current_id;
+                    sent_this_connection = sent_this_connection.saturating_add(1);
 
                     info!("TCP send #{} completed", current_id);
 
-                    match socket.read(&mut socket_read_buf).await {
-                        Ok(0) => {
+                    if short_mode_remaining > 0 {
+                        short_mode_remaining = short_mode_remaining.saturating_sub(1);
+                        info!(
+                            "TCP short-mode: closing connection after send #{} (remaining sends: {})",
+                            current_id,
+                            short_mode_remaining
+                        );
+                        break;
+                    }
+
+                    match with_timeout(
+                        Duration::from_millis(TCP_READ_PROBE_TIMEOUT_MS),
+                        socket.read(&mut socket_read_buf),
+                    )
+                    .await
+                    {
+                        Ok(Ok(0)) => {
                             warn!("TCP peer closed connection after send #{}", current_id);
+                            closed_by_reset = true;
                             break;
                         }
-                        Ok(len) => {
+                        Ok(Ok(len)) => {
                             info!("TCP receive after send #{}: {} bytes", current_id, len);
                             log_serial_bytes("UART3 PPP RX", &socket_read_buf[..len]);
                         }
+                        Ok(Err(err)) => {
+                            let mut err_text: String<64> = String::new();
+                            let _ = write!(&mut err_text, "{:?}", Debug2Format(&err));
+
+                            if err_text.contains("ConnectionReset")
+                                || err_text.contains("ConnectionAborted")
+                                || err_text.contains("ConnectionClosed")
+                            {
+                                warn!(
+                                    "TCP connection lost after send #{} ({}), reconnecting",
+                                    current_id,
+                                    err_text.as_str()
+                                );
+                                closed_by_reset = true;
+                                break;
+                            }
+                        }
                         Err(_) => {
-                            info!("TCP receive after send #{}: no data yet", current_id);
+                            // No incoming data within probe window; continue periodic send loop.
                         }
                     }
 
-                    Timer::after_secs(TCP_SEND_INTERVAL_SECS).await;
+                    Timer::after_millis(TCP_SEND_INTERVAL_MS).await;
+                }
+
+                if sent_this_connection <= 1 && (closed_by_reset || closed_by_send_failure) {
+                    early_reset_streak = early_reset_streak.saturating_add(1);
+                    warn!(
+                        "TCP early-close streak: {}/{}",
+                        early_reset_streak,
+                        TCP_LONG_MODE_RESET_THRESHOLD
+                    );
+                } else if sent_this_connection >= 2 {
+                    early_reset_streak = 0;
+                }
+
+                if short_mode_remaining == 0 && early_reset_streak >= TCP_LONG_MODE_RESET_THRESHOLD {
+                    short_mode_remaining = TCP_SHORT_MODE_HOLD_SENDS;
+                    early_reset_streak = 0;
+                    warn!(
+                        "TCP switching to short-connection fallback for next {} sends (long mode remains preferred and will auto-resume)",
+                        TCP_SHORT_MODE_HOLD_SENDS
+                    );
                 }
 
                 info!("TCP connection closed, preparing to reconnect");
                 let _ = socket.close();
             }
             Err(err) => {
-                let _ = err;
                 warn!(
-                    "TCP connect attempt #{} failed for {}:{}, retrying",
+                    "TCP connect attempt #{} failed for {}:{} ({:?}), retrying",
                     connect_attempt,
                     host,
                     port,
+                    Debug2Format(&err)
                 );
             }
         }
