@@ -5,8 +5,16 @@ license.workspace = true
 publish = false
 
 [dependencies]
-ariel-os = { path = "../../src/ariel-os", features = ["time"] }
+ariel-os = { path = "../../src/ariel-os", features = ["time", "uart"] }
 ariel-os-boards = { path = "../../src/ariel-os-boards" }
+embassy-futures = { workspace = true }
+embassy-net = { workspace = true, features = ["medium-ip", "proto-ipv4", "tcp", "udp"] }
+embassy-net-ppp = "0.3.0"
+embassy-stm32 = { workspace = true, features = ["stm32f427vg"] }
+embedded-io-async-06 = { package = "embedded-io-async", version = "0.6.1" }
+embedded-io-async-07 = { package = "embedded-io-async", version = "0.7.0" }
+heapless = { workspace = true }
+static_cell = { workspace = true }
 
 [lints]
 workspace = true

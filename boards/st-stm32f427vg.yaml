@@ -4,6 +4,30 @@ targets:
     chip: stm32f427vg
     ariel:
       swi: USART1
+    # Local Ariel OS board extension.
+    # The wrapper script `scripts/generate-ariel-boards.ps1` strips this block
+    # before calling upstream `sbd-gen`, then injects the modem metadata back
+    # into the generated board support crate.
+    modem:
+      model: EC800M
+      uart: USART3
+      baudrate: 921600
+      uart_dma: true
+      rx_pin: PD9
+      tx_pin: PD8
+      power:
+        pin: PD15
+        active: low
+      pwrkey:
+        pin: PD13
+        active: low
+        pulse_ms: 1000
+    uarts:
+      modem:
+        rx_pin: PD9
+        tx_pin: PD8
+        possible_peripherals:
+          - USART3
     leds:
       led0:
         pin: PE9

@@ -1,2 +1,6 @@
 apps:
   - name: tbox
+    env:
+      global:
+        executor_stacksize_required:
+          - "32768"

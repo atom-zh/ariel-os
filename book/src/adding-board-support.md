@@ -59,6 +59,17 @@ With the board description file in place, regenerate the `ariel-os-boards` crate
 To do that, install [`sbd-gen`][sbd] with `cargo install sbd-gen`, then run the following command from the `ariel os` repository root:
 
 ```sh
+pwsh ./scripts/generate-ariel-boards.ps1
+```
+
+This wrapper delegates to `sbd-gen`, but also preserves Ariel OS local board
+extensions that are not part of upstream SBD yet. At the moment this is used by
+the `modem` subtree in [boards/st-stm32f427vg.yaml](../../boards/st-stm32f427vg.yaml).
+
+If a board file only contains upstream-compatible SBD fields, calling `sbd-gen`
+directly is still fine:
+
+```sh
 sbd-gen generate-ariel boards -o src/ariel-os-boards --mode update
 ```
 

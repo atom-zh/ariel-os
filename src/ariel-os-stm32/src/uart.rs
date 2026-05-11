@@ -2,7 +2,9 @@
 
 #![expect(unsafe_code)]
 
-use ariel_os_embassy_common::{impl_async_uart_for_driver_enum, uart::ConfigError};
+use ariel_os_embassy_common::{
+    impl_async_uart_bufread_for_driver_enum, impl_async_uart_for_driver_enum, uart::ConfigError,
+};
 use embassy_stm32::{
     bind_interrupts, peripherals,
     usart::{BufferedInterruptHandler, BufferedUart, RxPin, TxPin},
@@ -248,6 +250,7 @@ macro_rules! define_uart_drivers {
             type Error = embassy_stm32::usart::Error;
         }
 
+        impl_async_uart_bufread_for_driver_enum!(Uart, $( $peripheral ),*);
         impl_async_uart_for_driver_enum!(Uart, $( $peripheral ),*);
     }
 }
@@ -287,6 +290,14 @@ define_uart_drivers!(
    USART1 => USART1,
    // USART2 => USART2, // Often used as SWI
    USART6 => USART6,
+);
+#[cfg(context = "stm32f427vg")]
+define_uart_drivers!(
+    // USART1 => USART1, // Used as SWI on st-stm32f427vg
+    USART2 => USART2,
+    UART4 => UART4,
+    UART5 => UART5,
+    USART6 => USART6,
 );
 #[cfg(context = "stm32f767zi")]
 define_uart_drivers!(
@@ -385,6 +396,14 @@ pub fn init(peripherals: &mut crate::OptionalPeripherals) {
         context = "stm32f411re" => {
             let _ = peripherals.USART1.take().unwrap();
             let _ = peripherals.USART2.take().unwrap();
+            let _ = peripherals.USART6.take().unwrap();
+        }
+        context = "stm32f427vg" => {
+            let _ = peripherals.USART1.take().unwrap();
+            let _ = peripherals.USART2.take().unwrap();
+            let _ = peripherals.USART3.take().unwrap();
+            let _ = peripherals.UART4.take().unwrap();
+            let _ = peripherals.UART5.take().unwrap();
             let _ = peripherals.USART6.take().unwrap();
         }
         context = "stm32f767zi" => {
