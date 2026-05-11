@@ -2,12 +2,12 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Build hello-world stm32f427vg",
+			"label": "Build tbox stm32f427vg",
 			"type": "shell",
 			"command": "laze",
 			"args": [
 				"-C",
-				"examples/hello-world",
+				"examples/tbox",
 				"build",
 				"-b",
 				"st-stm32f427vg"

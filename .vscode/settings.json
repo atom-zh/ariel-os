@@ -2,8 +2,20 @@
   "rust-analyzer.linkedProjects": [
     "Cargo.toml"
   ],
+  "rust-analyzer.server.extraEnv": {
+    "CARGO_HOME": "E:/code/rust/cg/427"
+  },
+  "rust-analyzer.cargo.extraEnv": {
+    "CARGO_HOME": "E:/code/rust/cg/427"
+  },
+  "rust-analyzer.check.extraEnv": {
+    "CARGO_HOME": "E:/code/rust/cg/427"
+  },
   "rust-analyzer.cargo.target": "thumbv7em-none-eabihf",
+  "rust-analyzer.cargo.targetDir": true,
   "rust-analyzer.cargo.allTargets": false,
+  "rust-analyzer.check.allTargets": false,
+  "rust-analyzer.check.workspace": false,
   "rust-analyzer.cargo.features": [
     "time"
   ],
@@ -20,6 +32,13 @@
     "capability=\"hw/stm32-usb-synopsys\"",
     "capability=\"hw/stm32-rng\"",
     "use_stm32_single_bank"
+  ],
+  "rust-analyzer.diagnostics.remapPrefix": {
+    "C:/Users/Administrator/.cargo": "E:/code/rust/cg/427"
+  },
+  "rust-analyzer.vfs.extraIncludes": [
+    "E:code/rust/cg/427/git/checkouts",
+    "C:/Users/Administrator/.cargo/git/checkouts"
   ],
   "C_Cpp_Runner.cCompilerPath": "gcc",
   "C_Cpp_Runner.cppCompilerPath": "g++",
