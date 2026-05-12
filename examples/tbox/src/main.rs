@@ -3,6 +3,7 @@
 
 mod modem;
 mod pins;
+mod tcp_client;
 
 use ariel_os::{
     gpio::{Level, Output},

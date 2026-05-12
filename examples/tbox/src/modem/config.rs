@@ -1,0 +1,20 @@
+pub(super) const UART_LINE_BUFFER: usize = 128;
+pub(super) const SERIAL_LOG_PREVIEW: usize = 48;
+pub(super) const MODEM_PROBE_TIMEOUT_MS: u64 = 3_000;
+pub(super) const MODEM_BAUD_SETTLE_MS: u64 = 200;
+pub(super) const MODEM_DRAIN_TIMEOUT_MS: u64 = 100;
+pub(super) const MODEM_ATTACH_TIMEOUT_MS: u64 = 10_000;
+pub(super) const MODEM_NETWORK_READY_TIMEOUT_SECS: u64 = 60;
+pub(super) const MODEM_NETWORK_POLL_INTERVAL_SECS: u64 = 3;
+pub(super) const UART_STASH_SIZE: usize = 256;
+pub(super) const MODEM_BOOT_PROBE_START_DELAY_MS: u64 = 5_000;
+pub(super) const MODEM_BOOT_WAIT_MAX_MS: u64 = 20_000;
+pub(super) const MODEM_FIXED_BAUD: u32 = 921_600;
+pub(super) const UART_RX_LINE_LOG_BUFFER: usize = 160;
+pub(super) const PPP_PARSE_BUFFER: usize = 192;
+pub(super) const PPP_CTRL_LOG_SAMPLES_MAX: u8 = 24;
+
+pub(super) const MODEM_APN: Option<&str> = option_env!("CONFIG_MODEM_APN");
+pub(super) const MODEM_DEFAULT_APN: &str = "CMNET";
+pub(super) const PPP_USERNAME: Option<&str> = option_env!("CONFIG_PPP_USERNAME");
+pub(super) const PPP_PASSWORD: Option<&str> = option_env!("CONFIG_PPP_PASSWORD");
