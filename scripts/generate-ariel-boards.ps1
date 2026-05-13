@@ -18,7 +18,7 @@ function Remove-LocalExtensionBlocks([string]$Content) {
     $skipping = $false
 
     foreach ($line in $lines) {
-        if (-not $skipping -and $line -match '^\s{4}(modem|tbox_log):\s*$') {
+        if (-not $skipping -and $line -match '^\s{4}(modem|tbox_log|can):\s*$') {
             $skipping = $true
             continue
         }
@@ -93,13 +93,33 @@ function Patch-Stm32f427vgBoard([string]$BoardYamlPath, [string]$GeneratedRsPath
     $canLogTag = Get-LogSetting $tboxLogText 'can' 'tag' 'can'
     $canLogEnabled = (Get-LogSetting $tboxLogText 'can' 'enabled' 'true').ToLowerInvariant()
 
+    $canBlock = [regex]::Match($yaml, '(?ms)^\s{4}can:\s*$.*?(?=^\s{4}\S|\z)')
+    $canText = if ($canBlock.Success) { $canBlock.Value } else { "" }
+    $canPeripheral = Get-YamlScalar $canText '^\s{6}peripheral:\s*(.+)$' 'CAN2'
+    $canMasterPeripheral = Get-YamlScalar $canText '^\s{6}master_peripheral:\s*(.+)$' 'CAN1'
+    $canRxPin = Get-YamlScalar $canText '^\s{6}rx_pin:\s*(.+)$' 'PB12'
+    $canTxPin = Get-YamlScalar $canText '^\s{6}tx_pin:\s*(.+)$' 'PB13'
+    $canPhy = Get-YamlScalar $canText '^\s{6}phy:\s*(.+)$' 'TJA1042'
+    $canStandbyPin = Get-YamlScalar $canText '^\s{6}standby_pin:\s*(.+)$' 'PB4'
+    $canStandbyNormalLevel = Get-YamlScalar $canText '^\s{6}standby_normal_level:\s*(.+)$' 'low'
+    $canBitrate = Get-YamlScalar $canText '^\s{6}bitrate:\s*(.+)$' '250000'
+    $canSamplePointPermille = Get-YamlScalar $canText '^\s{6}sample_point_permille:\s*(.+)$' '889'
+    $canFilterSplitIndex = Get-YamlScalar $canText '^\s{6}filter_split_index:\s*(.+)$' '13'
+    $canFilterBankIndex = Get-YamlScalar $canText '^\s{6}filter_bank_index:\s*(.+)$' '13'
+    $canTestId = Get-YamlScalar $canText '^\s{6}test_id:\s*(.+)$' '0x123'
+    $canLoopbackTestId = Get-YamlScalar $canText '^\s{6}loopback_test_id:\s*(.+)$' '0x321'
+    $canLoopbackTimeoutMs = Get-YamlScalar $canText '^\s{6}loopback_timeout_ms:\s*(.+)$' '300'
+
     $rs = [regex]::Replace($rs, '(?ms)\n\s*ariel_os_hal::define_peripherals!\(\s*ModemPeripherals \{.*?\n\s*\);', '')
+    $rs = [regex]::Replace($rs, '(?ms)\n\s*ariel_os_hal::define_peripherals!\(\s*CanPeripherals \{.*?\n\s*\);', '')
     $rs = [regex]::Replace($rs, '(?m)^pub type ModemUart<''a> = .*?;\r?\n?', '')
     $rs = [regex]::Replace($rs, '(?ms)\n?pub mod modem \{.*?\n\}\r?\n?', '')
+    $rs = [regex]::Replace($rs, '(?ms)\n?^pub mod can \{.*?^\}\r?\n?', '', [System.Text.RegularExpressions.RegexOptions]::Multiline)
     $rs = [regex]::Replace($rs, '(?ms)\n?pub mod tbox_log \{.*?\n\}\r?\n(?=\r?\n#\[allow\(unused_variables\)\])', '')
 
     $powerActiveHigh = [string]($powerActive -eq 'high')
     $pwrkeyActiveHigh = [string]($pwrkeyActive -eq 'high')
+    $canStandbyNormalLevelHigh = [string]($canStandbyNormalLevel -eq 'high')
 
     $modemPeripherals = @"
     ariel_os_hal::define_peripherals!(
@@ -110,6 +130,13 @@ function Patch-Stm32f427vgBoard([string]$BoardYamlPath, [string]$GeneratedRsPath
             modem_tx: $txPin,
         }
     );
+        ariel_os_hal::define_peripherals!(
+            CanPeripherals {
+                can_rx: $canRxPin,
+                can_tx: $canTxPin,
+                can_standby: $canStandbyPin,
+            }
+        );
 "@
 
     $injected = @"
@@ -130,6 +157,34 @@ pub mod modem {
     pub const POWER_ACTIVE_HIGH: bool = $($powerActiveHigh.ToLowerInvariant());
     pub const PWRKEY_ACTIVE_HIGH: bool = $($pwrkeyActiveHigh.ToLowerInvariant());
     pub const PWRKEY_PULSE_MS: u64 = $pwrkeyPulseMs;
+}
+
+pub mod can {
+    pub const PERIPHERAL: &str = "$canPeripheral";
+    pub const MASTER_PERIPHERAL: &str = "$canMasterPeripheral";
+    pub const RX_PIN: &str = "$canRxPin";
+    pub const TX_PIN: &str = "$canTxPin";
+    pub const PHY: &str = "$canPhy";
+    pub const STANDBY_PIN: &str = "$canStandbyPin";
+    pub const STANDBY_NORMAL_LEVEL_HIGH: bool = $($canStandbyNormalLevelHigh.ToLowerInvariant());
+    pub type Peripheral = ariel_os_hal::hal::peripherals::$canPeripheral;
+    pub type MasterPeripheral = ariel_os_hal::hal::peripherals::$canMasterPeripheral;
+    pub type RxPin = ariel_os_hal::hal::peripherals::$canRxPin;
+    pub type TxPin = ariel_os_hal::hal::peripherals::$canTxPin;
+    pub type StandbyPin = ariel_os_hal::hal::peripherals::$canStandbyPin;
+
+    #[expect(unsafe_code, reason = "board-selected CAN peripheral")]
+    pub fn steal_peripheral() -> ariel_os_hal::hal::Peri<'static, Peripheral> {
+        unsafe { Peripheral::steal() }
+    }
+
+    pub const BITRATE: u32 = $canBitrate;
+    pub const SAMPLE_POINT_PERMILLE: u16 = $canSamplePointPermille;
+    pub const FILTER_SPLIT_INDEX: u8 = $canFilterSplitIndex;
+    pub const FILTER_BANK_INDEX: u8 = $canFilterBankIndex;
+    pub const TEST_ID: u16 = $canTestId;
+    pub const LOOPBACK_TEST_ID: u16 = $canLoopbackTestId;
+    pub const LOOPBACK_TIMEOUT_MS: u64 = $canLoopbackTimeoutMs;
 }
 
 pub mod tbox_log {

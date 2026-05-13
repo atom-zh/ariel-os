@@ -12,6 +12,13 @@ pub mod pins {
             modem_tx: PD8,
         }
     );
+    ariel_os_hal::define_peripherals!(
+        CanPeripherals {
+            can_rx: PB12,
+            can_tx: PB13,
+            can_standby: PB4,
+        }
+    );
 }
 
 pub mod modem {
@@ -22,6 +29,34 @@ pub mod modem {
     pub const POWER_ACTIVE_HIGH: bool = false;
     pub const PWRKEY_ACTIVE_HIGH: bool = false;
     pub const PWRKEY_PULSE_MS: u64 = 1_000;
+}
+
+pub mod can {
+    pub const PERIPHERAL: &str = "CAN2";
+    pub const MASTER_PERIPHERAL: &str = "CAN1";
+    pub const RX_PIN: &str = "PB12";
+    pub const TX_PIN: &str = "PB13";
+    pub const PHY: &str = "TJA1042";
+    pub const STANDBY_PIN: &str = "PB4";
+    pub const STANDBY_NORMAL_LEVEL_HIGH: bool = false;
+    pub type Peripheral = ariel_os_hal::hal::peripherals::CAN2;
+    pub type MasterPeripheral = ariel_os_hal::hal::peripherals::CAN1;
+    pub type RxPin = ariel_os_hal::hal::peripherals::PB12;
+    pub type TxPin = ariel_os_hal::hal::peripherals::PB13;
+    pub type StandbyPin = ariel_os_hal::hal::peripherals::PB4;
+
+    #[expect(unsafe_code, reason = "board-selected CAN peripheral")]
+    pub fn steal_peripheral() -> ariel_os_hal::hal::Peri<'static, Peripheral> {
+        unsafe { Peripheral::steal() }
+    }
+
+    pub const BITRATE: u32 = 250_000;
+    pub const SAMPLE_POINT_PERMILLE: u16 = 889;
+    pub const FILTER_SPLIT_INDEX: u8 = 13;
+    pub const FILTER_BANK_INDEX: u8 = 13;
+    pub const TEST_ID: u16 = 0x123;
+    pub const LOOPBACK_TEST_ID: u16 = 0x321;
+    pub const LOOPBACK_TIMEOUT_MS: u64 = 300;
 }
 
 pub mod tbox_log {

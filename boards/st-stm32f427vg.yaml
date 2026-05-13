@@ -32,6 +32,21 @@ targets:
       can:
         tag: can
         enabled: true
+    can:
+      peripheral: CAN2
+      master_peripheral: CAN1
+      rx_pin: PB12
+      tx_pin: PB13
+      phy: TJA1042
+      standby_pin: PB4
+      standby_normal_level: low
+      bitrate: 250000
+      sample_point_permille: 889
+      filter_split_index: 13
+      filter_bank_index: 13
+      test_id: 0x123
+      loopback_test_id: 0x321
+      loopback_timeout_ms: 300
     uarts:
       modem:
         rx_pin: PD9

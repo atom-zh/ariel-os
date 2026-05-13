@@ -89,7 +89,7 @@ async fn main(peripherals: pins::Peripherals) {
         }
     };
 
-    join(can::run(peripherals.led), modem_task).await;
+    join(can::run(peripherals.led, peripherals.can), modem_task).await;
 }
 
 fn inactive_level(active_high: bool) -> Level {

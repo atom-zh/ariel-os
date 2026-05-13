@@ -6,32 +6,48 @@ use ariel_os::{
 use core::fmt::Write as _;
 use core::num::{NonZeroU8, NonZeroU16};
 use embassy_futures::join::join;
-use embassy_stm32::{bind_interrupts, can as stm_can, pac, peripherals};
+use embassy_stm32::{bind_interrupts, can as stm_can, pac, rcc};
 use heapless::String;
 
-const CAN_BITRATE: u32 = 250_000;
-const CAN_SAMPLE_POINT_PERMILLE: u16 = 875;
-const CAN_TEST_ID: u16 = 0x123;
-const CAN2_FILTER_SPLIT_INDEX: u8 = 13;
-const CAN2_FILTER_BANK_INDEX: u8 = 13;
-const CAN_LOOPBACK_TEST_ID: u16 = 0x321;
-const CAN_LOOPBACK_TIMEOUT_MS: u64 = 300;
+type BoardCanMasterPeripheral = ariel_os_boards::can::MasterPeripheral;
+type BoardCanPeripheral = ariel_os_boards::can::Peripheral;
+type BoardCanRxPin = ariel_os_boards::can::RxPin;
+type BoardCanStandbyPin = ariel_os_boards::can::StandbyPin;
+type BoardCanTxPin = ariel_os_boards::can::TxPin;
+
+const CAN_BITRATE: u32 = ariel_os_boards::can::BITRATE;
+const CAN_SAMPLE_POINT_PERMILLE: u16 = ariel_os_boards::can::SAMPLE_POINT_PERMILLE;
+const CAN_TEST_ID: u16 = ariel_os_boards::can::TEST_ID;
+const CAN2_FILTER_SPLIT_INDEX: u8 = ariel_os_boards::can::FILTER_SPLIT_INDEX;
+const CAN2_FILTER_BANK_INDEX: u8 = ariel_os_boards::can::FILTER_BANK_INDEX;
+const CAN_LOOPBACK_TEST_ID: u16 = ariel_os_boards::can::LOOPBACK_TEST_ID;
+const CAN_LOOPBACK_TIMEOUT_MS: u64 = ariel_os_boards::can::LOOPBACK_TIMEOUT_MS;
 
 mod irq {
-    use super::{bind_interrupts, peripherals, stm_can};
+    use super::{BoardCanPeripheral, bind_interrupts, stm_can};
 
     bind_interrupts!(pub struct CanIrqs {
-        CAN2_TX => stm_can::TxInterruptHandler<peripherals::CAN2>;
-        CAN2_RX0 => stm_can::Rx0InterruptHandler<peripherals::CAN2>;
-        CAN2_RX1 => stm_can::Rx1InterruptHandler<peripherals::CAN2>;
-        CAN2_SCE => stm_can::SceInterruptHandler<peripherals::CAN2>;
+        CAN2_TX => stm_can::TxInterruptHandler<BoardCanPeripheral>;
+        CAN2_RX0 => stm_can::Rx0InterruptHandler<BoardCanPeripheral>;
+        CAN2_RX1 => stm_can::Rx1InterruptHandler<BoardCanPeripheral>;
+        CAN2_SCE => stm_can::SceInterruptHandler<BoardCanPeripheral>;
     });
 }
 
-pub async fn run(led_peripherals: ariel_os_boards::pins::LedPeripherals) {
+pub async fn run(
+    led_peripherals: ariel_os_boards::pins::LedPeripherals,
+    can_peripherals: ariel_os_boards::pins::CanPeripherals,
+) {
     let mut led0 = Output::new(led_peripherals.led0, Level::Low);
+    let ariel_os_boards::pins::CanPeripherals {
+        can_rx,
+        can_tx,
+        can_standby,
+    } = can_peripherals;
 
-    let (can2, can_rx, can_tx) = take_can2_resources();
+    let _can_standby = enable_can_transceiver(can_standby);
+    enable_can_shared_master_clock();
+    let (can2, can_rx, can_tx) = take_can_resources(can_rx, can_tx);
     let mut can = stm_can::Can::new(can2, can_rx, can_tx, irq::CanIrqs);
 
     configure_can2_accept_all_filter();
@@ -39,8 +55,16 @@ pub async fn run(led_peripherals: ariel_os_boards::pins::LedPeripherals) {
     configure_can_mode(&mut can, false, false).await;
 
     info!(
-        "CAN2 ready on PB12/PB13, bitrate={}bps, sample-point={}‰, test-id=0x{:x}",
-        CAN_BITRATE, CAN_SAMPLE_POINT_PERMILLE, CAN_TEST_ID
+        "{} ready on {}/{}, phy={} stb={}({}), bitrate={}bps, sample-point={}‰, test-id=0x{:x}",
+        ariel_os_boards::can::PERIPHERAL,
+        ariel_os_boards::can::RX_PIN,
+        ariel_os_boards::can::TX_PIN,
+        ariel_os_boards::can::PHY,
+        ariel_os_boards::can::STANDBY_PIN,
+        can_transceiver_normal_level_label(),
+        CAN_BITRATE,
+        CAN_SAMPLE_POINT_PERMILLE,
+        CAN_TEST_ID
     );
 
     let (mut can_tx, mut can_rx) = can.split();
@@ -116,25 +140,61 @@ pub async fn run(led_peripherals: ariel_os_boards::pins::LedPeripherals) {
     join(join(blink_task, tx_task), rx_task).await;
 }
 
-fn can_timing_250k_875() -> stm_can::util::NominalBitTiming {
-    // APB1 = 42MHz 时：250kbps, 87.5% 采样点可用一组显式参数：
-    // tq = (prescaler / 42MHz) = 21 / 42MHz
-    // bit = 1 + seg1 + seg2 = 8 tq  => 42MHz / (21 * 8) = 250kbps
-    // sample point = (1 + seg1) / 8 = (1 + 6) / 8 = 87.5%
+fn can_timing_250k_889() -> stm_can::util::NominalBitTiming {
+    // APB1 = 45MHz 时：
+    // tq = prescaler / 45MHz = 10 / 45MHz
+    // bit = 1 + seg1 + seg2 = 18 tq  => 45MHz / (10 * 18) = 250kbps
+    // sample point = (1 + seg1) / 18 = (1 + 15) / 18 = 88.9%
+    // 说明：45MHz 下无法整除得到精确 87.5% 采样点，这里选择最接近且稳定的一组参数。
     stm_can::util::NominalBitTiming {
-        prescaler: NonZeroU16::new(21).expect("non-zero prescaler"),
-        seg1: NonZeroU8::new(6).expect("non-zero seg1"),
-        seg2: NonZeroU8::new(1).expect("non-zero seg2"),
+        prescaler: NonZeroU16::new(10).expect("non-zero prescaler"),
+        seg1: NonZeroU8::new(15).expect("non-zero seg1"),
+        seg2: NonZeroU8::new(2).expect("non-zero seg2"),
         sync_jump_width: NonZeroU8::new(1).expect("non-zero sjw"),
     }
 }
 
 async fn configure_can_mode(can: &mut stm_can::Can<'_>, loopback: bool, silent: bool) {
-    can.modify_config().set_bit_timing(can_timing_250k_875());
+    can.modify_config().set_bit_timing(can_timing_250k_889());
     can.modify_config()
         .set_loopback(loopback)
         .set_silent(silent);
     can.enable().await;
+}
+
+fn enable_can_transceiver(
+    standby_pin: embassy_stm32::Peri<'static, BoardCanStandbyPin>,
+) -> Output<'static> {
+    let normal_level = can_transceiver_normal_level();
+    info!(
+        "CAN PHY {} standby pin {} -> {} before CAN init",
+        ariel_os_boards::can::PHY,
+        ariel_os_boards::can::STANDBY_PIN,
+        can_transceiver_normal_level_label()
+    );
+    Output::new(standby_pin, normal_level)
+}
+
+fn can_transceiver_normal_level() -> Level {
+    if ariel_os_boards::can::STANDBY_NORMAL_LEVEL_HIGH {
+        Level::High
+    } else {
+        Level::Low
+    }
+}
+
+fn can_transceiver_normal_level_label() -> &'static str {
+    if ariel_os_boards::can::STANDBY_NORMAL_LEVEL_HIGH {
+        "high"
+    } else {
+        "low"
+    }
+}
+
+fn enable_can_shared_master_clock() {
+    // STM32F4 bxCAN2 is a slave instance: filters/SRAM are shared with CAN1.
+    // Keep the CAN1 clock enabled before touching shared filter registers or CAN2.
+    rcc::enable_and_reset::<BoardCanMasterPeripheral>();
 }
 
 async fn run_loopback_self_test(can: &mut stm_can::Can<'_>) {
@@ -197,22 +257,19 @@ fn configure_can2_accept_all_filter() {
     pac::CAN1.fmr().modify(|reg| reg.set_finit(false));
 }
 
-#[expect(
-    unsafe_code,
-    reason = "temporary direct take for CAN2 PB12/PB13 debug on stm32f427vg"
-)]
-fn take_can2_resources() -> (
-    embassy_stm32::Peri<'static, peripherals::CAN2>,
-    embassy_stm32::Peri<'static, peripherals::PB12>,
-    embassy_stm32::Peri<'static, peripherals::PB13>,
+fn take_can_resources(
+    can_rx: embassy_stm32::Peri<'static, BoardCanRxPin>,
+    can_tx: embassy_stm32::Peri<'static, BoardCanTxPin>,
+) -> (
+    embassy_stm32::Peri<'static, BoardCanPeripheral>,
+    embassy_stm32::Peri<'static, BoardCanRxPin>,
+    embassy_stm32::Peri<'static, BoardCanTxPin>,
 ) {
-    unsafe {
-        (
-            peripherals::CAN2::steal(),
-            peripherals::PB12::steal(),
-            peripherals::PB13::steal(),
-        )
-    }
+    (
+        ariel_os_boards::can::steal_peripheral(),
+        can_rx,
+        can_tx,
+    )
 }
 
 fn log_can_bytes(prefix: &str, bytes: &[u8]) {
