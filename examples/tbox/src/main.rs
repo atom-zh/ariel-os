@@ -1,16 +1,18 @@
 #![no_main]
 #![no_std]
 
+#[macro_use]
+mod tagged_log;
+mod can;
 mod modem;
 mod pins;
 mod tcp_client;
 
 use ariel_os::{
     gpio::{Level, Output},
-    log::*,
     time::Timer,
 };
-use embassy_futures::select::{Either, select};
+use embassy_futures::join::join;
 use embassy_stm32::{bind_interrupts, peripherals, usart};
 
 const MODEM_POWER_OFF_WAIT_MS: u64 = 1_000;
@@ -27,8 +29,6 @@ mod irq {
 
 #[ariel_os::task(autostart, peripherals)]
 async fn main(peripherals: pins::Peripherals) {
-    let mut led0 = Output::new(peripherals.led.led0, Level::Low);
-
     let power_active_high = ariel_os_boards::modem::POWER_ACTIVE_HIGH;
     let pwrkey_active_high = ariel_os_boards::modem::PWRKEY_ACTIVE_HIGH;
 
@@ -68,53 +68,36 @@ async fn main(peripherals: pins::Peripherals) {
 
     let mut uart = modem::DmaUart::new(uart);
 
-    loop {
-        power_cycle_modem(
-            &mut modem_power,
-            power_active_high,
-            &mut modem_pwrkey,
-            pwrkey_active_high,
-        )
-        .await;
+    let modem_task = async {
+        loop {
+            power_cycle_modem(
+                &mut modem_power,
+                power_active_high,
+                &mut modem_pwrkey,
+                pwrkey_active_high,
+            )
+            .await;
 
-        let outcome = match select(
-            async {
-                loop {
-                    led0.toggle();
-                    Timer::after_millis(500).await;
+            let outcome = modem::run(&mut uart).await;
+
+            match outcome {
+                modem::RunOutcome::RetryPowerCycle => {
+                    warn!("EC800M session failed, power-cycling and retrying");
+                    Timer::after_millis(MODEM_RETRY_WAIT_MS).await;
                 }
-            },
-            modem::run(&mut uart),
-        )
-        .await
-        {
-            Either::Second(outcome) => outcome,
-            Either::First(_) => unreachable!(),
-        };
-
-        match outcome {
-            modem::RunOutcome::RetryPowerCycle => {
-                warn!("EC800M session failed, power-cycling and retrying");
-                Timer::after_millis(MODEM_RETRY_WAIT_MS).await;
             }
         }
-    }
+    };
+
+    join(can::run(peripherals.led), modem_task).await;
 }
 
 fn inactive_level(active_high: bool) -> Level {
-    if active_high {
-        Level::Low
-    } else {
-        Level::High
-    }
+    if active_high { Level::Low } else { Level::High }
 }
 
 fn active_level(active_high: bool) -> Level {
-    if active_high {
-        Level::High
-    } else {
-        Level::Low
-    }
+    if active_high { Level::High } else { Level::Low }
 }
 
 async fn power_cycle_modem(
@@ -132,13 +115,19 @@ async fn power_cycle_modem(
     modem_power.set_level(active_level(power_active_high));
     Timer::after_millis(100).await;
 
-    info!("pulsing EC800M PWRKEY for {}ms", ariel_os_boards::modem::PWRKEY_PULSE_MS);
+    info!(
+        "pulsing EC800M PWRKEY for {}ms",
+        ariel_os_boards::modem::PWRKEY_PULSE_MS
+    );
     modem_pwrkey.set_level(active_level(pwrkey_active_high));
     Timer::after_millis(ariel_os_boards::modem::PWRKEY_PULSE_MS).await;
     modem_pwrkey.set_level(inactive_level(pwrkey_active_high));
 }
 
-#[expect(unsafe_code, reason = "temporary direct take for DMA modem UART on stm32f427vg")]
+#[expect(
+    unsafe_code,
+    reason = "temporary direct take for DMA modem UART on stm32f427vg"
+)]
 fn take_modem_uart_resources() -> (
     embassy_stm32::Peri<'static, peripherals::USART3>,
     embassy_stm32::Peri<'static, peripherals::DMA1_CH3>,

@@ -1,16 +1,17 @@
 use core::fmt::Write as _;
 use core::sync::atomic::Ordering;
 
-use ariel_os::{
-    log::*,
-    time::Timer,
-};
+use ariel_os::time::{Duration, Timer, with_timeout};
 use embassy_stm32::{mode::Async, usart::Uart as EmbassyUart};
 use embedded_io_async_07 as embedded_io_async_new;
 use embedded_io_async_new::BufRead;
 use heapless::String;
 
-use super::config::{PPP_CTRL_LOG_SAMPLES_MAX, PPP_PARSE_BUFFER, SERIAL_LOG_PREVIEW, UART_RX_LINE_LOG_BUFFER, UART_STASH_SIZE};
+use super::config::{
+    PPP_CTRL_LOG_SAMPLES_MAX, PPP_PARSE_BUFFER, SERIAL_LOG_PREVIEW, UART_RX_LINE_LOG_BUFFER,
+    UART_STASH_SIZE,
+};
+use super::ipcp::{IPCP_FALLBACK_FRAME_MAX, IpcpFallback};
 use super::state::PPP_RX_CONTROL_SEEN;
 
 pub struct DmaUart<'d> {
@@ -26,6 +27,7 @@ pub struct DmaUart<'d> {
     ppp_rx_log_samples: u8,
     ppp_ctrl_log_samples: u8,
     ppp_phase: PppPhase,
+    ipcp_fallback: IpcpFallback,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -51,6 +53,7 @@ impl<'d> DmaUart<'d> {
             ppp_rx_log_samples: 0,
             ppp_ctrl_log_samples: 0,
             ppp_phase: PppPhase::Idle,
+            ipcp_fallback: IpcpFallback::new(),
         }
     }
 
@@ -63,6 +66,7 @@ impl<'d> DmaUart<'d> {
             self.ppp_rx_log_samples = 0;
             self.ppp_ctrl_log_samples = 0;
             self.ppp_phase = PppPhase::Lcp;
+            self.ipcp_fallback.reset();
             PPP_RX_CONTROL_SEEN.store(false, Ordering::Relaxed);
             info!("PPP phase: LCP negotiation started");
         }
@@ -89,7 +93,8 @@ impl<'d> DmaUart<'d> {
 
     fn contains_protocol(buf: &[u8], proto: &[u8; 2]) -> bool {
         buf.windows(2).any(|w| w == proto)
-            || buf.windows(4)
+            || buf
+                .windows(4)
                 .any(|w| w == [0x7d, proto[0] ^ 0x20, 0x7d, proto[1] ^ 0x20])
     }
 
@@ -99,7 +104,9 @@ impl<'d> DmaUart<'d> {
             return;
         }
 
-        if Self::contains_protocol(buf, &[0xC0, 0x23]) || Self::contains_protocol(buf, &[0xC2, 0x23]) {
+        if Self::contains_protocol(buf, &[0xC0, 0x23])
+            || Self::contains_protocol(buf, &[0xC2, 0x23])
+        {
             self.set_ppp_phase(PppPhase::Auth);
             return;
         }
@@ -195,7 +202,10 @@ impl<'d> DmaUart<'d> {
 
         for i in 0..(used.saturating_sub(5)) {
             let protocol = [decoded[i], decoded[i + 1]];
-            let known = matches!(protocol, [0xC0, 0x21] | [0xC0, 0x23] | [0xC2, 0x23] | [0x80, 0x21]);
+            let known = matches!(
+                protocol,
+                [0xC0, 0x21] | [0xC0, 0x23] | [0xC2, 0x23] | [0x80, 0x21]
+            );
             if !known {
                 continue;
             }
@@ -222,6 +232,17 @@ impl<'d> DmaUart<'d> {
                 return;
             }
         }
+    }
+
+    async fn maybe_send_ipcp_fallback(&mut self) -> Result<(), embedded_io_async_new::ErrorKind> {
+        let mut frame = [0u8; IPCP_FALLBACK_FRAME_MAX];
+        let Some(len) = self.ipcp_fallback.next_frame(&mut frame) else {
+            return Ok(());
+        };
+        self.inner
+            .write(&frame[..len])
+            .await
+            .map_err(|_| embedded_io_async_new::ErrorKind::Other)
     }
 
     fn log_rx_chunk_lines(&mut self, chunk: &[u8]) {
@@ -290,8 +311,13 @@ impl<'d> DmaUart<'d> {
         } else {
             let mut retries = 0u8;
             loop {
-                match self.inner.read_until_idle(&mut self.stash).await {
-                    Ok(len) => {
+                match with_timeout(
+                    Duration::from_secs(3),
+                    self.inner.read_until_idle(&mut self.stash),
+                )
+                .await
+                {
+                    Ok(Ok(len)) => {
                         if len == 0 {
                             Timer::after_millis(1).await;
                             continue;
@@ -299,12 +325,15 @@ impl<'d> DmaUart<'d> {
                         self.stash_len = len;
                         return Ok(());
                     }
-                    Err(_) => {
+                    Ok(Err(_)) => {
                         retries = retries.saturating_add(1);
                         if retries == 8 {
                             warn!("UART3 RX transient errors in PPP mode, continuing retries");
                         }
                         Timer::after_millis(5).await;
+                    }
+                    Err(_) => {
+                        self.maybe_send_ipcp_fallback().await?;
                     }
                 }
             }
@@ -348,15 +377,24 @@ impl embedded_io_async_new::Read for DmaUart<'_> {
 impl embedded_io_async_new::BufRead for DmaUart<'_> {
     async fn fill_buf(&mut self) -> Result<&[u8], Self::Error> {
         self.refill_stash().await?;
-        let should_mark_rx = !self.log_io && !self.ppp_rx_started && !self.available().is_empty();
-        if should_mark_rx {
+        if !self.log_io && !self.available().is_empty() {
+            let parse_len = self.available().len().min(PPP_PARSE_BUFFER);
             let preview_len = self.available().len().min(SERIAL_LOG_PREVIEW);
+            let mut parse = [0u8; PPP_PARSE_BUFFER];
             let mut preview = [0u8; SERIAL_LOG_PREVIEW];
+            parse[..parse_len].copy_from_slice(&self.available()[..parse_len]);
             preview[..preview_len].copy_from_slice(&self.available()[..preview_len]);
-            self.observe_ppp_phase_from_bytes(&preview[..preview_len]);
-            self.observe_ppp_control_from_bytes(&preview[..preview_len], true);
-            self.ppp_rx_started = true;
-            info!("PPP RX data stream detected");
+
+            // 关键：每次 fill_buf 都观察当前缓冲区。ppp runner 使用 BufRead，若只在首次 RX 时观察，
+            // 后续 LCP/PAP/IPCP 入站帧会被协议栈消费但不会置位监控标志，导致误判无入站控制帧。
+            self.observe_ppp_phase_from_bytes(&parse[..parse_len]);
+            self.observe_ppp_control_from_bytes(&parse[..parse_len], true);
+            PPP_RX_CONTROL_SEEN.store(true, Ordering::Relaxed);
+
+            if !self.ppp_rx_started {
+                self.ppp_rx_started = true;
+                info!("PPP RX data stream detected");
+            }
             if self.ppp_rx_log_samples < 4 {
                 self.ppp_rx_log_samples += 1;
                 log_serial_bytes("UART3 PPP RX", &preview[..preview_len]);
@@ -379,11 +417,14 @@ impl embedded_io_async_new::Write for DmaUart<'_> {
             return Ok(0);
         }
 
+        let mut send_ipcp_fallback = false;
+
         if self.log_io {
             log_serial_bytes("UART3 TX", buf);
         } else {
             self.observe_ppp_phase_from_bytes(buf);
             self.observe_ppp_control_from_bytes(buf, false);
+            send_ipcp_fallback = self.ipcp_fallback.cache_from_ppp_frame(buf);
             if !self.ppp_tx_started {
                 self.ppp_tx_started = true;
                 info!("PPP TX data stream started");
@@ -397,6 +438,12 @@ impl embedded_io_async_new::Write for DmaUart<'_> {
             .write(buf)
             .await
             .map_err(|_| embedded_io_async_new::ErrorKind::Other)?;
+
+        if send_ipcp_fallback {
+            Timer::after_millis(700).await;
+            self.maybe_send_ipcp_fallback().await?;
+        }
+
         Ok(buf.len())
     }
 

@@ -1,5 +1,6 @@
 mod at;
 mod config;
+mod ipcp;
 mod ppp;
 mod state;
 mod uart;

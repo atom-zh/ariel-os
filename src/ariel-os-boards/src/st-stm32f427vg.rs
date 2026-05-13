@@ -24,5 +24,22 @@ pub mod modem {
     pub const PWRKEY_PULSE_MS: u64 = 1_000;
 }
 
+pub mod tbox_log {
+    pub mod kernel {
+        pub const TAG: &str = "kernel";
+        pub const ENABLED: bool = true;
+    }
+
+    pub mod modem {
+        pub const TAG: &str = "modem";
+        pub const ENABLED: bool = false;
+    }
+
+    pub mod can {
+        pub const TAG: &str = "can";
+        pub const ENABLED: bool = true;
+    }
+}
+
 #[allow(unused_variables)]
 pub fn init(peripherals: &mut ariel_os_hal::hal::OptionalPeripherals) {}

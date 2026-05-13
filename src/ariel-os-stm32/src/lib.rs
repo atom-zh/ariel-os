@@ -247,6 +247,29 @@ fn rcc_config() -> embassy_stm32::rcc::Config {
         rcc.sys = Sysclk::PLL1_P;
     }
 
+    #[cfg(context = "st-stm32f427vg")]
+    {
+        use embassy_stm32::rcc::*;
+
+        rcc.hsi = false;
+        rcc.hse = Some(Hse {
+            freq: embassy_stm32::time::Hertz(25_000_000),
+            mode: HseMode::Oscillator,
+        });
+        rcc.pll_src = PllSource::HSE;
+        rcc.pll = Some(Pll {
+            prediv: PllPreDiv::DIV25,  // 25 MHz / 25 = 1 MHz PLL input
+            mul: PllMul::MUL360,       // 1 MHz * 360 = 360 MHz VCO
+            divp: Some(PllPDiv::DIV2), // 360 MHz / 2 = 180 MHz SYSCLK
+            divq: Some(PllQDiv::DIV8), // 360 MHz / 8 = 45 MHz for PLL48 consumers
+            divr: None,
+        });
+        rcc.ahb_pre = AHBPrescaler::DIV1; // HCLK 180 MHz
+        rcc.apb1_pre = APBPrescaler::DIV4; // PCLK1 45 MHz
+        rcc.apb2_pre = APBPrescaler::DIV2; // PCLK2 90 MHz
+        rcc.sys = Sysclk::PLL1_P;
+    }
+
     #[cfg(context = "stm32h755zi")]
     {
         use embassy_stm32::rcc::*;

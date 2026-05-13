@@ -12,13 +12,13 @@ function Get-RepoPath([string]$Path) {
     return [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\$Path"))
 }
 
-function Remove-ModemBlock([string]$Content) {
+function Remove-LocalExtensionBlocks([string]$Content) {
     $result = New-Object System.Collections.Generic.List[string]
     $lines = $Content -split "`r?`n"
     $skipping = $false
 
     foreach ($line in $lines) {
-        if (-not $skipping -and $line -match '^\s{4}modem:\s*$') {
+        if (-not $skipping -and $line -match '^\s{4}(modem|tbox_log):\s*$') {
             $skipping = $true
             continue
         }
@@ -44,6 +44,16 @@ function Get-YamlScalar([string]$Content, [string]$Pattern, [string]$Default = "
         return $match.Groups[1].Value.Trim()
     }
     return $Default
+}
+
+function Get-LogSetting([string]$Content, [string]$Name, [string]$Field, [string]$Default) {
+    $blockPattern = '(?ms)^\s{6}' + [regex]::Escape($Name) + ':\s*$.*?(?=^\s{6}\S|^\s{4}\S|\z)'
+    $block = [regex]::Match($Content, $blockPattern)
+    if (-not $block.Success) {
+        return $Default
+    }
+
+    return Get-YamlScalar $block.Value ('^\s{8}' + [regex]::Escape($Field) + ':\s*(.+)$') $Default
 }
 
 function Patch-Stm32f427vgBoard([string]$BoardYamlPath, [string]$GeneratedRsPath) {
@@ -74,9 +84,19 @@ function Patch-Stm32f427vgBoard([string]$BoardYamlPath, [string]$GeneratedRsPath
     $pwrkeyActive = Get-YamlScalar $pwrkeyText '^\s{8}active:\s*(.+)$' 'low'
     $pwrkeyPulseMs = Get-YamlScalar $pwrkeyText '^\s{8}pulse_ms:\s*(.+)$' '1000'
 
+    $tboxLogBlock = [regex]::Match($yaml, '(?ms)^\s{4}tbox_log:\s*$.*?(?=^\s{4}\S|\z)')
+    $tboxLogText = if ($tboxLogBlock.Success) { $tboxLogBlock.Value } else { "" }
+    $kernelLogTag = Get-LogSetting $tboxLogText 'kernel' 'tag' 'kernel'
+    $kernelLogEnabled = (Get-LogSetting $tboxLogText 'kernel' 'enabled' 'true').ToLowerInvariant()
+    $modemLogTag = Get-LogSetting $tboxLogText 'modem' 'tag' 'modem'
+    $modemLogEnabled = (Get-LogSetting $tboxLogText 'modem' 'enabled' 'false').ToLowerInvariant()
+    $canLogTag = Get-LogSetting $tboxLogText 'can' 'tag' 'can'
+    $canLogEnabled = (Get-LogSetting $tboxLogText 'can' 'enabled' 'true').ToLowerInvariant()
+
     $rs = [regex]::Replace($rs, '(?ms)\n\s*ariel_os_hal::define_peripherals!\(\s*ModemPeripherals \{.*?\n\s*\);', '')
     $rs = [regex]::Replace($rs, '(?m)^pub type ModemUart<''a> = .*?;\r?\n?', '')
     $rs = [regex]::Replace($rs, '(?ms)\n?pub mod modem \{.*?\n\}\r?\n?', '')
+    $rs = [regex]::Replace($rs, '(?ms)\n?pub mod tbox_log \{.*?\n\}\r?\n(?=\r?\n#\[allow\(unused_variables\)\])', '')
 
     $powerActiveHigh = [string]($powerActive -eq 'high')
     $pwrkeyActiveHigh = [string]($pwrkeyActive -eq 'high')
@@ -112,6 +132,23 @@ pub mod modem {
     pub const PWRKEY_PULSE_MS: u64 = $pwrkeyPulseMs;
 }
 
+pub mod tbox_log {
+    pub mod kernel {
+        pub const TAG: &str = "$kernelLogTag";
+        pub const ENABLED: bool = $kernelLogEnabled;
+    }
+
+    pub mod modem {
+        pub const TAG: &str = "$modemLogTag";
+        pub const ENABLED: bool = $modemLogEnabled;
+    }
+
+    pub mod can {
+        pub const TAG: &str = "$canLogTag";
+        pub const ENABLED: bool = $canLogEnabled;
+    }
+}
+
 #[allow(unused_variables)]
 "@
 
@@ -131,7 +168,7 @@ try {
 
     $stmBoard = Join-Path $tempBoards "st-stm32f427vg.yaml"
     if (Test-Path $stmBoard) {
-        $sanitized = Remove-ModemBlock (Get-Content -Raw $stmBoard)
+        $sanitized = Remove-LocalExtensionBlocks (Get-Content -Raw $stmBoard)
         Set-Content -Path $stmBoard -Value $sanitized -Encoding UTF8NoBOM
     }
 

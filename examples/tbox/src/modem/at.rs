@@ -2,7 +2,7 @@ use core::fmt;
 use core::sync::atomic::Ordering;
 
 use ariel_os::{
-    log::*,
+    log::Debug2Format,
     time::{Duration, Timer, with_timeout},
 };
 use embedded_io_async_07 as embedded_io_async_new;
@@ -49,9 +49,7 @@ pub(super) async fn prepare_modem_with_autobaud(
 
         info!(
             "AT probe attempt #{} at fixed {}bps (budget {}ms)",
-            attempt,
-            baudrate,
-            remaining_boot_probe_ms
+            attempt, baudrate, remaining_boot_probe_ms
         );
 
         match with_timeout(
@@ -64,8 +62,14 @@ pub(super) async fn prepare_modem_with_autobaud(
                 at_ok = true;
                 break;
             }
-            Ok(Err(_)) => warn!("no AT response on attempt #{} at fixed {}bps", attempt, baudrate),
-            Err(_) => warn!("AT probe timed out on attempt #{} at fixed {}bps", attempt, baudrate),
+            Ok(Err(_)) => warn!(
+                "no AT response on attempt #{} at fixed {}bps",
+                attempt, baudrate
+            ),
+            Err(_) => warn!(
+                "AT probe timed out on attempt #{} at fixed {}bps",
+                attempt, baudrate
+            ),
         }
 
         remaining_boot_probe_ms = remaining_boot_probe_ms.saturating_sub(probe_timeout_ms);
@@ -181,7 +185,11 @@ pub(super) async fn prepare_modem_with_autobaud(
         let apn = MODEM_APN.unwrap_or(MODEM_DEFAULT_APN);
         let user = PPP_USERNAME.unwrap_or("");
         let pass = PPP_PASSWORD.unwrap_or("");
-        let auth = if user.is_empty() && pass.is_empty() { 0 } else { 1 };
+        let auth = if user.is_empty() && pass.is_empty() {
+            0
+        } else {
+            1
+        };
         let mut cmd = [0u8; 160];
         let len = match write_qicsgp_command(&mut cmd, 1, apn, user, pass, auth) {
             Ok(len) => len,
@@ -198,7 +206,10 @@ pub(super) async fn prepare_modem_with_autobaud(
         )
         .await
         {
-            Ok(Ok(())) => info!("Quectel PDP profile configured via AT+QICSGP (cid=1, auth={})", auth),
+            Ok(Ok(())) => info!(
+                "Quectel PDP profile configured via AT+QICSGP (cid=1, auth={})",
+                auth
+            ),
             Ok(Err(_)) => warn!("AT+QICSGP returned non-OK, continuing with CGDCONT/CGAUTH path"),
             Err(_) => warn!("AT+QICSGP timed out, continuing with CGDCONT/CGAUTH path"),
         }
@@ -267,7 +278,10 @@ pub(super) async fn prepare_modem_with_autobaud(
             .take(attempted_count)
             .any(|v| v.is_some_and(|existing| existing == dial))
         {
-            info!("skipping duplicate PPP dial command #{}: {}", dial_index, dial);
+            info!(
+                "skipping duplicate PPP dial command #{}: {}",
+                dial_index, dial
+            );
             continue;
         }
 
@@ -337,7 +351,8 @@ async fn wait_for_network_ready(uart: &mut DmaUart<'_>) -> bool {
         );
 
         let signal_ok = csq_rssi.map(|v| v != 99).unwrap_or(false);
-        let reg_ok = is_registered(creg_stat) || is_registered(cgreg_stat) || is_registered(cereg_stat);
+        let reg_ok =
+            is_registered(creg_stat) || is_registered(cgreg_stat) || is_registered(cereg_stat);
         let attach_ok = matches!(cgatt_stat, Some(1));
 
         if signal_ok && reg_ok && attach_ok {
@@ -402,14 +417,22 @@ async fn drain_pending_input(uart: &mut DmaUart<'_>) {
     let mut byte = [0u8; 1];
 
     loop {
-        match with_timeout(Duration::from_millis(MODEM_DRAIN_TIMEOUT_MS), uart.read(&mut byte)).await {
+        match with_timeout(
+            Duration::from_millis(MODEM_DRAIN_TIMEOUT_MS),
+            uart.read(&mut byte),
+        )
+        .await
+        {
             Ok(Ok(0)) | Ok(Err(_)) | Err(_) => break,
             Ok(Ok(_)) => info!("discarding stale UART byte before AT probe"),
         }
     }
 }
 
-fn write_apn_command(buf: &mut [u8], apn: &str) -> Result<usize, ModemError<core::convert::Infallible>> {
+fn write_apn_command(
+    buf: &mut [u8],
+    apn: &str,
+) -> Result<usize, ModemError<core::convert::Infallible>> {
     let prefix = b"AT+CGDCONT=1,\"IP\",\"";
     let suffix = b"\"";
     let required = prefix.len() + apn.len() + suffix.len();
@@ -428,14 +451,22 @@ fn write_apn_command(buf: &mut [u8], apn: &str) -> Result<usize, ModemError<core
     Ok(index)
 }
 
-async fn send_expect<RW>(uart: &mut RW, command: &str, expected: &str) -> Result<(), ModemError<RW::Error>>
+async fn send_expect<RW>(
+    uart: &mut RW,
+    command: &str,
+    expected: &str,
+) -> Result<(), ModemError<RW::Error>>
 where
     RW: Read + Write,
 {
     send_expect_bytes(uart, command.as_bytes(), expected).await
 }
 
-async fn send_expect_bytes<RW>(uart: &mut RW, command: &[u8], expected: &str) -> Result<(), ModemError<RW::Error>>
+async fn send_expect_bytes<RW>(
+    uart: &mut RW,
+    command: &[u8],
+    expected: &str,
+) -> Result<(), ModemError<RW::Error>>
 where
     RW: Read + Write,
 {

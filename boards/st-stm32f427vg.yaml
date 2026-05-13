@@ -22,6 +22,16 @@ targets:
         pin: PD13
         active: low
         pulse_ms: 1000
+    tbox_log:
+      kernel:
+        tag: kernel
+        enabled: true
+      modem:
+        tag: modem
+        enabled: false
+      can:
+        tag: can
+        enabled: true
     uarts:
       modem:
         rx_pin: PD9

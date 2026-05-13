@@ -1,7 +1,7 @@
 use core::sync::atomic::{AtomicU8, Ordering};
 
 use ariel_os::{
-    log::*,
+    log::Debug2Format,
     time::{Duration, with_timeout},
 };
 use embassy_futures::join::join;
@@ -22,9 +22,9 @@ const PPP_TX_QUEUE: usize = 4;
 const PPP_SEED: u64 = 0x5442_4f58_5050_5001;
 const PPP_UP_TIMEOUT_SECS: u64 = 90;
 const PPP_WAIT_PROGRESS_INTERVAL_SECS: u64 = 5;
-const PPP_RX_CONTROL_TIMEOUT_SECS: u64 = 12;
+const PPP_RX_CONTROL_TIMEOUT_SECS: u64 = 30;
 
-pub(super) const DIAL_CANDIDATE_COUNT: u8 = 3;
+pub(super) const DIAL_CANDIDATE_COUNT: u8 = 4;
 
 static NET_RESOURCES: StaticCell<StackResources<SOCKETS>> = StaticCell::new();
 static PPP_STATE: StaticCell<PppState<PPP_RX_QUEUE, PPP_TX_QUEUE>> = StaticCell::new();
@@ -40,8 +40,9 @@ pub enum RunOutcome {
 
 pub(super) fn dial_candidate_by_index(index: u8) -> &'static str {
     match index % DIAL_CANDIDATE_COUNT {
-        0 => "ATD*99#",
-        1 => "ATD*99***1#",
+        0 => "AT+CGDATA=\"PPP\",1",
+        1 => "ATD*99#",
+        2 => "ATD*99***1#",
         _ => "ATD*98*1#",
     }
 }
@@ -114,13 +115,12 @@ pub async fn run(uart: &mut DmaUart<'_>) -> RunOutcome {
 
     let ppp_and_net = async move {
         info!("PPP runner starting (LCP/auth/IPCP negotiation)");
-        join(
-            async move { net_runner.run().await },
-            async move {
-                let Err(err) = ppp_runner.run(uart, ppp_cfg, |status| on_ipv4_up(stack, status)).await;
-                warn!("PPP session ended: {:?}", Debug2Format(&err));
-            },
-        )
+        join(async move { net_runner.run().await }, async move {
+            let Err(err) = ppp_runner
+                .run(uart, ppp_cfg, |status| on_ipv4_up(stack, status))
+                .await;
+            warn!("PPP session ended: {:?}", Debug2Format(&err));
+        })
         .await;
 
         RunOutcome::RetryPowerCycle
@@ -131,7 +131,8 @@ pub async fn run(uart: &mut DmaUart<'_>) -> RunOutcome {
         let mut waited_secs = 0u64;
 
         loop {
-            let wait_slice = (PPP_UP_TIMEOUT_SECS - waited_secs).min(PPP_WAIT_PROGRESS_INTERVAL_SECS);
+            let wait_slice =
+                (PPP_UP_TIMEOUT_SECS - waited_secs).min(PPP_WAIT_PROGRESS_INTERVAL_SECS);
             match with_timeout(Duration::from_secs(wait_slice), stack.wait_config_up()).await {
                 Ok(()) => {
                     info!("PPP is up, TCP/UDP socket API is ready");
@@ -144,8 +145,7 @@ pub async fn run(uart: &mut DmaUart<'_>) -> RunOutcome {
                     waited_secs += wait_slice;
                     info!(
                         "PPP negotiation/auth still in progress: {}s/{}s",
-                        waited_secs,
-                        PPP_UP_TIMEOUT_SECS
+                        waited_secs, PPP_UP_TIMEOUT_SECS
                     );
                     if waited_secs >= PPP_RX_CONTROL_TIMEOUT_SECS
                         && !PPP_RX_CONTROL_SEEN.load(Ordering::Relaxed)
@@ -154,10 +154,11 @@ pub async fn run(uart: &mut DmaUart<'_>) -> RunOutcome {
                         let active_cmd = dial_candidate_by_index(active);
                         warn!(
                             "PPP has no inbound LCP/AUTH/IPCP frames within {}s after CONNECT (dial=\"{}\"), retrying modem cycle",
-                            PPP_RX_CONTROL_TIMEOUT_SECS,
-                            active_cmd
+                            PPP_RX_CONTROL_TIMEOUT_SECS, active_cmd
                         );
-                        advance_dial_strategy_from_active("no inbound PPP control frame after CONNECT");
+                        advance_dial_strategy_from_active(
+                            "no inbound PPP control frame after CONNECT",
+                        );
                         return RunOutcome::RetryPowerCycle;
                     }
                     if waited_secs >= PPP_UP_TIMEOUT_SECS {
@@ -165,8 +166,7 @@ pub async fn run(uart: &mut DmaUart<'_>) -> RunOutcome {
                         let active_cmd = dial_candidate_by_index(active);
                         warn!(
                             "PPP did not come up within {}s (dial=\"{}\"), requesting modem power cycle",
-                            PPP_UP_TIMEOUT_SECS,
-                            active_cmd
+                            PPP_UP_TIMEOUT_SECS, active_cmd
                         );
                         advance_dial_strategy_from_active("PPP up timeout");
                         return RunOutcome::RetryPowerCycle;
@@ -183,7 +183,10 @@ pub async fn run(uart: &mut DmaUart<'_>) -> RunOutcome {
 }
 
 fn net_resources() -> &'static mut StackResources<SOCKETS> {
-    #[expect(unsafe_code, reason = "cache StaticCell allocation across modem retries")]
+    #[expect(
+        unsafe_code,
+        reason = "cache StaticCell allocation across modem retries"
+    )]
     unsafe {
         if let Some(ptr) = NET_RESOURCES_PTR {
             &mut *ptr
@@ -196,7 +199,10 @@ fn net_resources() -> &'static mut StackResources<SOCKETS> {
 }
 
 fn ppp_state() -> &'static mut PppState<PPP_RX_QUEUE, PPP_TX_QUEUE> {
-    #[expect(unsafe_code, reason = "cache StaticCell allocation across modem retries")]
+    #[expect(
+        unsafe_code,
+        reason = "cache StaticCell allocation across modem retries"
+    )]
     unsafe {
         if let Some(ptr) = PPP_STATE_PTR {
             &mut *ptr

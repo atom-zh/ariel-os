@@ -2,7 +2,7 @@ use core::fmt::Write as _;
 use core::str::FromStr as _;
 
 use ariel_os::{
-    log::*,
+    log::Debug2Format,
     time::{Duration, Timer, with_timeout},
 };
 use embassy_net::{Ipv4Address, Stack, tcp::TcpSocket};
@@ -57,7 +57,10 @@ fn resolve_target() -> Option<(&'static str, Ipv4Address, u16)> {
 fn log_target(host: &str, host_addr: Ipv4Address, port: u16) {
     let [ha, hb, hc, hd] = host_addr.octets();
     info!("server target: {}:{}", host, port);
-    info!("server target parsed as {}.{}.{}.{}:{}", ha, hb, hc, hd, port);
+    info!(
+        "server target parsed as {}.{}.{}.{}:{}",
+        ha, hb, hc, hd, port
+    );
 }
 
 fn log_adaptive_mode(short_mode_remaining: u32) {
@@ -82,8 +85,7 @@ fn update_adaptive_state(
         *early_reset_streak = early_reset_streak.saturating_add(1);
         warn!(
             "TCP early-close streak: {}/{}",
-            *early_reset_streak,
-            TCP_LONG_MODE_RESET_THRESHOLD
+            *early_reset_streak, TCP_LONG_MODE_RESET_THRESHOLD
         );
     } else if outcome.sent_this_connection >= 2 {
         *early_reset_streak = 0;
@@ -136,9 +138,7 @@ async fn run_connection(
                     if write_try > 1 {
                         info!(
                             "TCP send #{} succeeded on retry {}/{}",
-                            current_id,
-                            write_try,
-                            TCP_WRITE_RETRY_MAX
+                            current_id, write_try, TCP_WRITE_RETRY_MAX
                         );
                     }
                     break;
@@ -161,8 +161,7 @@ async fn run_connection(
         if !write_ok {
             warn!(
                 "TCP send #{} failed before commit (last committed #{}), reconnecting",
-                current_id,
-                *message_counter,
+                current_id, *message_counter,
             );
             outcome.closed_by_send_failure = true;
             break;
@@ -177,8 +176,7 @@ async fn run_connection(
             *short_mode_remaining = short_mode_remaining.saturating_sub(1);
             info!(
                 "TCP short-mode: closing connection after send #{} (remaining sends: {})",
-                current_id,
-                *short_mode_remaining
+                current_id, *short_mode_remaining
             );
             break;
         }
@@ -225,7 +223,10 @@ async fn run_connection(
 }
 
 fn tcp_rx_buf() -> &'static mut [u8; 512] {
-    #[expect(unsafe_code, reason = "cache StaticCell allocation across modem retries")]
+    #[expect(
+        unsafe_code,
+        reason = "cache StaticCell allocation across modem retries"
+    )]
     unsafe {
         if let Some(ptr) = TCP_RX_BUF_PTR {
             &mut *ptr
@@ -238,7 +239,10 @@ fn tcp_rx_buf() -> &'static mut [u8; 512] {
 }
 
 fn tcp_tx_buf() -> &'static mut [u8; 512] {
-    #[expect(unsafe_code, reason = "cache StaticCell allocation across modem retries")]
+    #[expect(
+        unsafe_code,
+        reason = "cache StaticCell allocation across modem retries"
+    )]
     unsafe {
         if let Some(ptr) = TCP_TX_BUF_PTR {
             &mut *ptr
@@ -273,17 +277,13 @@ pub async fn run(stack: Stack<'static>) {
 
         info!(
             "TCP connect attempt #{}: starting handshake to {}:{} over PPP",
-            connect_attempt,
-            host,
-            port,
+            connect_attempt, host, port,
         );
         match socket.connect((host_addr, port)).await {
             Ok(()) => {
                 info!(
                     "TCP connect attempt #{} succeeded: connected to {}:{}",
-                    connect_attempt,
-                    host,
-                    port,
+                    connect_attempt, host, port,
                 );
                 socket.set_timeout(Some(Duration::from_secs(TCP_IO_TIMEOUT_SECS)));
 
@@ -299,11 +299,7 @@ pub async fn run(stack: Stack<'static>) {
                 )
                 .await;
 
-                update_adaptive_state(
-                    &outcome,
-                    &mut early_reset_streak,
-                    &mut short_mode_remaining,
-                );
+                update_adaptive_state(&outcome, &mut early_reset_streak, &mut short_mode_remaining);
 
                 info!("TCP connection closed, preparing to reconnect");
                 let _ = socket.close();
