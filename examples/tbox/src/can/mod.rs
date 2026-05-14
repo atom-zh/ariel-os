@@ -5,6 +5,8 @@ use ariel_os::{
 };
 use core::fmt::Write as _;
 use core::num::{NonZeroU8, NonZeroU16};
+use crate::remote;
+use crate::vehicle::{ACTIVE_PROFILE, VehicleCanFrame, VehicleCanProfile};
 use embassy_futures::join::join;
 use embassy_stm32::{bind_interrupts, can as stm_can, pac, rcc};
 use heapless::String;
@@ -113,10 +115,14 @@ pub async fn run(
 
                     match frame.id() {
                         stm_can::Id::Standard(id) => {
-                            info!("CAN RX std id=0x{:x} dlc={}", id.as_raw(), data.len())
+                            let raw_id = u32::from(id.as_raw());
+                            info!("CAN RX std id=0x{:x} dlc={}", raw_id, data.len());
+                            parse_vehicle_can(raw_id, data);
                         }
                         stm_can::Id::Extended(id) => {
-                            info!("CAN RX ext id=0x{:x} dlc={}", id.as_raw(), data.len())
+                            let raw_id = id.as_raw();
+                            info!("CAN RX ext id=0x{:x} dlc={}", raw_id, data.len());
+                            parse_vehicle_can(raw_id, data);
                         }
                     }
 
@@ -138,6 +144,32 @@ pub async fn run(
     };
 
     join(join(blink_task, tx_task), rx_task).await;
+}
+
+fn parse_vehicle_can(id: u32, data: &[u8]) {
+    let frame = VehicleCanFrame::new(id, data);
+    match ACTIVE_PROFILE.parse(&frame) {
+        Ok(Some(message)) => {
+            remote::update_from_vehicle_message(&message);
+            crate::tagged_log::info_for_tag(
+                "vehicle",
+                format_args!(
+                    "vehicle[{}] parsed: {:?}",
+                    ACTIVE_PROFILE.name(),
+                    Debug2Format(&message)
+                ),
+            );
+        }
+        Ok(None) => {}
+        Err(err) => crate::tagged_log::warn_for_tag(
+            "vehicle",
+            format_args!(
+                "vehicle[{}] parse error: {:?}",
+                ACTIVE_PROFILE.name(),
+                Debug2Format(&err)
+            ),
+        ),
+    }
 }
 
 fn can_timing_250k_889() -> stm_can::util::NominalBitTiming {

@@ -92,6 +92,10 @@ function Patch-Stm32f427vgBoard([string]$BoardYamlPath, [string]$GeneratedRsPath
     $modemLogEnabled = (Get-LogSetting $tboxLogText 'modem' 'enabled' 'false').ToLowerInvariant()
     $canLogTag = Get-LogSetting $tboxLogText 'can' 'tag' 'can'
     $canLogEnabled = (Get-LogSetting $tboxLogText 'can' 'enabled' 'true').ToLowerInvariant()
+    $vehicleLogTag = Get-LogSetting $tboxLogText 'vehicle' 'tag' 'vehicle'
+    $vehicleLogEnabled = (Get-LogSetting $tboxLogText 'vehicle' 'enabled' 'true').ToLowerInvariant()
+    $remoteLogTag = Get-LogSetting $tboxLogText 'remote' 'tag' 'remote'
+    $remoteLogEnabled = (Get-LogSetting $tboxLogText 'remote' 'enabled' 'true').ToLowerInvariant()
 
     $canBlock = [regex]::Match($yaml, '(?ms)^\s{4}can:\s*$.*?(?=^\s{4}\S|\z)')
     $canText = if ($canBlock.Success) { $canBlock.Value } else { "" }
@@ -201,6 +205,16 @@ pub mod tbox_log {
     pub mod can {
         pub const TAG: &str = "$canLogTag";
         pub const ENABLED: bool = $canLogEnabled;
+    }
+
+    pub mod vehicle {
+        pub const TAG: &str = "$vehicleLogTag";
+        pub const ENABLED: bool = $vehicleLogEnabled;
+    }
+
+    pub mod remote {
+        pub const TAG: &str = "$remoteLogTag";
+        pub const ENABLED: bool = $remoteLogEnabled;
     }
 }
 

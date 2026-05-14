@@ -11,18 +11,19 @@ use heapless::String;
 use static_cell::StaticCell;
 
 use crate::modem::log_serial_bytes;
+use crate::remote;
 
-const DEFAULT_SOCKET_HOST: &str = "47.103.151.216";
+const DEFAULT_SOCKET_HOST: &str = "tbox.uatiothub.rhecube.com";
 const DEFAULT_SOCKET_PORT: u16 = 8089;
 const TCP_CONNECT_TIMEOUT_SECS: u64 = 30;
 const TCP_IO_TIMEOUT_SECS: u64 = 10;
-const TCP_SEND_INTERVAL_MS: u64 = 800;
+const TCP_SEND_INTERVAL_SECS: u64 = remote::HEARTBEAT_PERIOD_SECS;
 const TCP_READ_PROBE_TIMEOUT_MS: u64 = 80;
 const TCP_WRITE_RETRY_MAX: u8 = 3;
 const TCP_WRITE_RETRY_BACKOFF_SECS: u64 = 1;
 const TCP_LONG_MODE_RESET_THRESHOLD: u8 = 3;
 const TCP_SHORT_MODE_HOLD_SENDS: u32 = 20;
-const TCP_RECONNECT_DELAY_SECS: u64 = 5;
+const TCP_RECONNECT_DELAY_SECS: u64 = remote::RECONNECT_DELAY_SECS;
 
 static TCP_RX_BUF: StaticCell<[u8; 512]> = StaticCell::new();
 static TCP_TX_BUF: StaticCell<[u8; 512]> = StaticCell::new();
@@ -114,69 +115,54 @@ async fn run_connection(
         closed_by_reset: false,
         closed_by_send_failure: false,
     };
+    let mut sent_device_info = false;
+    let mut heartbeat_ticks: u32 = 0;
 
     loop {
-        let current_id = message_counter.saturating_add(1);
-
-        let mut payload: String<96> = String::new();
-        let _ = writeln!(&mut payload, "hello word {}", current_id);
-
-        info!(
-            "TCP send #{}: sending {} bytes to {}:{}",
-            current_id,
-            payload.len(),
-            host,
-            port,
-        );
-        log_serial_bytes("UART3 PPP TX", payload.as_bytes());
-
-        let mut write_ok = false;
-        for write_try in 1..=TCP_WRITE_RETRY_MAX {
-            match socket.write_all(payload.as_bytes()).await {
-                Ok(()) => {
-                    write_ok = true;
-                    if write_try > 1 {
-                        info!(
-                            "TCP send #{} succeeded on retry {}/{}",
-                            current_id, write_try, TCP_WRITE_RETRY_MAX
-                        );
-                    }
-                    break;
-                }
-                Err(err) => {
-                    warn!(
-                        "TCP send #{} write attempt {}/{} failed: {:?}",
-                        current_id,
-                        write_try,
-                        TCP_WRITE_RETRY_MAX,
-                        Debug2Format(&err)
-                    );
-                    if write_try < TCP_WRITE_RETRY_MAX {
-                        Timer::after_secs(TCP_WRITE_RETRY_BACKOFF_SECS).await;
-                    }
-                }
+        if !sent_device_info {
+            let Some(payload) = remote::build_device_info_packet(next_sequence(message_counter)) else {
+                warn!("remote device-info packet build failed");
+                outcome.closed_by_send_failure = true;
+                break;
+            };
+            if !send_payload(socket, host, port, message_counter, "device-info", payload.as_slice()).await {
+                outcome.closed_by_send_failure = true;
+                break;
             }
+            outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
+            sent_device_info = true;
         }
 
-        if !write_ok {
-            warn!(
-                "TCP send #{} failed before commit (last committed #{}), reconnecting",
-                current_id, *message_counter,
-            );
+        let Some(heartbeat) = remote::build_heartbeat_packet(next_sequence(message_counter)) else {
+            warn!("remote heartbeat packet build failed");
+            outcome.closed_by_send_failure = true;
+            break;
+        };
+        if !send_payload(socket, host, port, message_counter, "heartbeat", heartbeat.as_slice()).await {
             outcome.closed_by_send_failure = true;
             break;
         }
-
-        *message_counter = current_id;
         outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
+        heartbeat_ticks = heartbeat_ticks.saturating_add(1);
 
-        info!("TCP send #{} completed", current_id);
+        if heartbeat_ticks % 2 == 0 {
+            let Some(detail) = remote::build_battery_detail_packet(next_sequence(message_counter)) else {
+                warn!("remote battery-detail packet build failed");
+                outcome.closed_by_send_failure = true;
+                break;
+            };
+            if !send_payload(socket, host, port, message_counter, "battery-detail", detail.as_slice()).await {
+                outcome.closed_by_send_failure = true;
+                break;
+            }
+            outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
+        }
 
         if *short_mode_remaining > 0 {
             *short_mode_remaining = short_mode_remaining.saturating_sub(1);
             info!(
                 "TCP short-mode: closing connection after send #{} (remaining sends: {})",
-                current_id, *short_mode_remaining
+                *message_counter, *short_mode_remaining
             );
             break;
         }
@@ -188,12 +174,12 @@ async fn run_connection(
         .await
         {
             Ok(Ok(0)) => {
-                warn!("TCP peer closed connection after send #{}", current_id);
+                warn!("TCP peer closed connection after send #{}", *message_counter);
                 outcome.closed_by_reset = true;
                 break;
             }
             Ok(Ok(len)) => {
-                info!("TCP receive after send #{}: {} bytes", current_id, len);
+                info!("TCP receive after send #{}: {} bytes", *message_counter, len);
                 log_serial_bytes("UART3 PPP RX", &socket_read_buf[..len]);
             }
             Ok(Err(err)) => {
@@ -206,7 +192,7 @@ async fn run_connection(
                 {
                     warn!(
                         "TCP connection lost after send #{} ({}), reconnecting",
-                        current_id,
+                        *message_counter,
                         err_text.as_str()
                     );
                     outcome.closed_by_reset = true;
@@ -216,10 +202,70 @@ async fn run_connection(
             Err(_) => {}
         }
 
-        Timer::after_millis(TCP_SEND_INTERVAL_MS).await;
+        Timer::after_secs(TCP_SEND_INTERVAL_SECS).await;
     }
 
     outcome
+}
+
+async fn send_payload(
+    socket: &mut TcpSocket<'_>,
+    host: &str,
+    port: u16,
+    message_counter: &mut u64,
+    label: &str,
+    payload: &[u8],
+) -> bool {
+    let current_id = message_counter.saturating_add(1);
+
+    info!(
+        "TCP send #{} {}: sending {} bytes to {}:{}",
+        current_id,
+        label,
+        payload.len(),
+        host,
+        port,
+    );
+    log_serial_bytes("UART3 PPP TX", payload);
+
+    for write_try in 1..=TCP_WRITE_RETRY_MAX {
+        match socket.write_all(payload).await {
+            Ok(()) => {
+                if write_try > 1 {
+                    info!(
+                        "TCP send #{} succeeded on retry {}/{}",
+                        current_id, write_try, TCP_WRITE_RETRY_MAX
+                    );
+                }
+                *message_counter = current_id;
+                info!("TCP send #{} {} completed", current_id, label);
+                return true;
+            }
+            Err(err) => {
+                warn!(
+                    "TCP send #{} {} write attempt {}/{} failed: {:?}",
+                    current_id,
+                    label,
+                    write_try,
+                    TCP_WRITE_RETRY_MAX,
+                    Debug2Format(&err)
+                );
+                if write_try < TCP_WRITE_RETRY_MAX {
+                    Timer::after_secs(TCP_WRITE_RETRY_BACKOFF_SECS).await;
+                }
+            }
+        }
+    }
+
+    warn!(
+        "TCP send #{} {} failed before commit (last committed #{}), reconnecting",
+        current_id, label, *message_counter,
+    );
+    false
+}
+
+fn next_sequence(message_counter: &u64) -> u8 {
+    message_counter.wrapping_add(1) as u8
 }
 
 fn tcp_rx_buf() -> &'static mut [u8; 512] {

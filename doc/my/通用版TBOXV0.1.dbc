@@ -1,0 +1,299 @@
+VERSION ""
+
+
+NS_ : 
+	NS_DESC_
+	CM_
+	BA_DEF_
+	BA_
+	VAL_
+	CAT_DEF_
+	CAT_
+	FILTER
+	BA_DEF_DEF_
+	EV_DATA_
+	ENVVAR_DATA_
+	SGTYPE_
+	SGTYPE_VAL_
+	BA_DEF_SGTYPE_
+	BA_SGTYPE_
+	SIG_TYPE_REF_
+	VAL_TABLE_
+	SIG_GROUP_
+	SIG_VALTYPE_
+	SIGTYPE_VALTYPE_
+	BO_TX_BU_
+	BA_DEF_REL_
+	BA_REL_
+	BA_DEF_DEF_REL_
+	BU_SG_REL_
+	BU_EV_REL_
+	BU_BO_REL_
+	SG_MUL_VAL_
+
+BS_:
+
+BU_: BMS VCU TBox
+VAL_TABLE_ BatteryManufacturer 7 "BYD" 6 "EVE" 5 "LG" 4 "SAMSUN" 3 "MGL" 2 "Li Shen" 1 "CATL" ;
+VAL_TABLE_ VINFrameSeq 3 "Frame3" 2 "Frame2" 1 "Frame1" ;
+VAL_TABLE_ HandBrake 1 "Up" 0 "Down" ;
+VAL_TABLE_ ShiftState 5 "Reserved" 4 "D" 3 "N" 2 "R" 1 "P" 0 "InValid" ;
+VAL_TABLE_ FaultCode 32 "NTC8 DisConnect" 31 "NTC7 DisConnect" 30 "NTC6 DisConnect" 29 "NTC5 DisConnect" 28 "NTC4 DisConnect" 27 "NTC3 DisConnect" 26 "NTC2 DisConnect" 25 "NTC1 DisConnect" 24 "NTC8 Level 3" 23 "NTC7 Level 3" 22 "NTC6 Level 3" 21 "NTC5 Level 3" 20 "NTC4 Level 3" 19 "NTC3 Level 3" 18 "NTC2 Level 3" 17 "NTC1 Level 3" 16 "NTC8 Level 2" 15 "NTC7 Level 2" 14 "NTC6 Level 2" 13 "NTC5 Level 2" 12 "NTC4 Level 2" 11 "NTC3 Level 2" 10 "NTC2 Level 2" 9 "NTC1 Level 2" 8 "NTC8 Level 1" 7 "NTC7 Level 1" 6 "NTC6 Level 1" 5 "NTC5 Level 1" 4 "NTC4 Level 1" 3 "NTC3 Level 1" 2 "NTC2 Level 1" 1 "NTC1 Level 1" 0 "Normal" ;
+VAL_TABLE_ FaultLevel 3 "Level 3" 2 "Level 2" 1 "Level 1" 0 "No Fault" ;
+VAL_TABLE_ BatteryConnectState 3 "InValid" 2 "InValid" 1 "Connect" 0 "DisConnect" ;
+VAL_TABLE_ BatteryLockState 3 "InValid" 2 "Lock" 1 "UnLock" 0 "Unknow" ;
+
+
+BO_ 2558775539 B2V_ST3: 8 BMS
+ SG_ FemaleLineHighVoltage : 48|16@1+ (0.1,0) [0|6553.5] "V" Vector__XXX
+ SG_ BatteryHighVoltage : 32|16@1+ (0.1,0) [0|6553.5] "V" Vector__XXX
+
+BO_ 2558710003 B2V_ST2: 8 BMS
+ SG_ TotalCurrentOfBatteryPack : 16|16@1+ (0.1,-1000) [-1000|5553.5] "A" Vector__XXX
+ SG_ BatteryPackSOH : 8|8@1+ (0.4,0) [0|102] "%" Vector__XXX
+ SG_ BatteryPackSOC : 0|8@1+ (0.4,0) [0|102] "%" Vector__XXX
+
+BO_ 2565001459 BattSNInfo2: 8 BMS
+ SG_ BatterySN13 : 56|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatterySN12 : 48|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatterySN11 : 40|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatterySN10 : 32|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatterySN9 : 24|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatterySN8 : 16|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatterySN7 : 8|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ CheckSum2 : 0|8@1+ (1,0) [0|0] "" Vector__XXX
+
+BO_ 2564935923 BattSNInfo1: 8 BMS
+ SG_ BatterySN6 : 56|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatterySN5 : 48|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatterySN4 : 40|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatterySN3 : 32|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatterySN2 : 24|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatterySN1 : 16|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatteryManufacturer : 8|3@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ BatterySNLength : 11|5@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ CheckSum1 : 0|8@1+ (1,0) [0|0] "" Vector__XXX
+
+BO_ 2566115571 GunChargePower: 8 BMS
+ SG_ GunChargePower : 0|24@1+ (0.1,0) [0|1677721.5] "kwh" Vector__XXX
+
+BO_ 2566050035 ChangePower: 8 BMS
+ SG_ TotalChangePower : 24|24@1+ (0.1,0) [0|0] "kwh" Vector__XXX
+ SG_ TotalFeedBackPower : 0|24@1+ (0.1,0) [0|1677721.5] "kwh" Vector__XXX
+
+BO_ 2565984499 ChargePower: 8 BMS
+ SG_ SingleChargePower : 48|16@1+ (0.1,0) [0|6553.5] "kwh" Vector__XXX
+ SG_ TotalDisChargePower : 24|24@1+ (0.1,0) [0|1677721.5] "kwh" Vector__XXX
+ SG_ TotalChargePower : 0|24@1+ (0.1,0) [0|1677721.5] "kwh" Vector__XXX
+
+BO_ 2564944848 VIN: 8 Vector__XXX
+ SG_ VIN_17 m3 : 24|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_16 m3 : 16|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_15 m3 : 8|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_14 m2 : 56|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_13 m2 : 48|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_12 m2 : 40|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_11 m2 : 32|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_10 m2 : 24|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_9 m2 : 16|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_8 m2 : 8|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_7 m1 : 56|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_6 m1 : 48|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_5 m1 : 40|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_4 m1 : 32|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_3 m1 : 24|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_2 m1 : 16|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ VIN_1 m1 : 8|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ FrameSeq M : 0|8@1+ (1,0) [0|0] "" Vector__XXX
+
+BO_ 2566891503 VehicleInfo: 8 VCU
+ SG_ Handbrake : 52|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ Shift : 48|4@1+ (1,0) [0|10] "" Vector__XXX
+ SG_ Speed : 32|16@1+ (0.00390625,0) [0|255.99609375] "Km/h" Vector__XXX
+ SG_ TotalMileage : 0|32@1+ (0.1,0) [0|429496729.5] "Km" Vector__XXX
+
+BO_ 2566846631 Temperature: 8 TBox
+ SG_ NTC8 : 56|8@1+ (1,-40) [-40|215] "deg" Vector__XXX
+ SG_ NTC7 : 48|8@1+ (1,-40) [-40|215] "deg" Vector__XXX
+ SG_ NTC6 : 40|8@1+ (1,-40) [-40|215] "deg" Vector__XXX
+ SG_ NTC5 : 32|8@1+ (1,-40) [-40|215] "deg" Vector__XXX
+ SG_ NTC4 : 24|8@1+ (1,-40) [-40|215] "deg" Vector__XXX
+ SG_ NTC3 : 16|8@1+ (1,-40) [-40|215] "deg" Vector__XXX
+ SG_ NTC2 : 8|8@1+ (1,-40) [-40|215] "deg" Vector__XXX
+ SG_ NTC1 : 0|8@1+ (1,-40) [-40|215] "deg" Vector__XXX
+
+BO_ 2566912167 BatteryConnectState: 8 TBox
+ SG_ CheckSum1 : 16|8@1+ (1,0) [0|0] "" Vector__XXX
+ SG_ TBoxFaultLevel : 24|2@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ TBoxFaultCode : 32|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BatteryDisChargeConnect : 12|2@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ BatteryConnect : 10|2@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ BatteryChargeConnect : 14|2@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ BatteryLock : 8|2@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ Counter : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+
+
+
+CM_ BO_ 2558775539 "电池包绝缘值和总电压";
+CM_ SG_ 2558775539 FemaleLineHighVoltage "母线端高压";
+CM_ SG_ 2558775539 BatteryHighVoltage "电池端高压(主继电器内侧)";
+CM_ BO_ 2558710003 "电池包电流电量信息";
+CM_ SG_ 2558710003 TotalCurrentOfBatteryPack "电池包总电流";
+CM_ SG_ 2558710003 BatteryPackSOH "电池包SOH";
+CM_ SG_ 2558710003 BatteryPackSOC "电池包剩余电量";
+CM_ BO_ 2565001459 "电池编码信息2";
+CM_ SG_ 2565001459 BatterySN13 "电池SN13";
+CM_ SG_ 2565001459 BatterySN12 "电池SN12";
+CM_ SG_ 2565001459 BatterySN11 "电池SN11";
+CM_ SG_ 2565001459 BatterySN10 "电池SN10";
+CM_ SG_ 2565001459 BatterySN9 "电池SN9";
+CM_ SG_ 2565001459 BatterySN8 "电池SN8";
+CM_ SG_ 2565001459 BatterySN7 "电池SN7";
+CM_ SG_ 2565001459 CheckSum2 "电池编码信息2的CheckSum";
+CM_ BO_ 2564935923 "电池编码信息1";
+CM_ SG_ 2564935923 BatterySN6 "电池SN6";
+CM_ SG_ 2564935923 BatterySN5 "电池SN5";
+CM_ SG_ 2564935923 BatterySN4 "电池SN4";
+CM_ SG_ 2564935923 BatterySN3 "电池SN3";
+CM_ SG_ 2564935923 BatterySN2 "电池SN2";
+CM_ SG_ 2564935923 BatterySN1 "电池SN1";
+CM_ SG_ 2564935923 BatteryManufacturer "电池编码长度";
+CM_ SG_ 2564935923 BatterySNLength "电池编码长度";
+CM_ SG_ 2564935923 CheckSum1 "电池编码信息1的CheckSum";
+CM_ SG_ 2566912167 CheckSum1 "电池编码信息1的CheckSum";
+BA_DEF_ BU_  "ILUsed" ENUM  "Yes","No";
+BA_DEF_ BO_  "TpJ1939VarDlc" ENUM  "No","Yes";
+BA_DEF_ SG_  "SigType" ENUM  "Default","Range","RangeSigned","ASCII","Discrete","Control","ReferencePGN","DTC","StringDelimiter","StringLength","StringLengthControl";
+BA_DEF_ SG_  "GenSigEVName" STRING ;
+BA_DEF_ SG_  "GenSigILSupport" ENUM  "No","Yes";
+BA_DEF_ SG_  "GenSigSendType" ENUM  "Cyclic","OnWrite","OnWriteWithRepetition","OnChange","OnChangeWithRepetition","IfActive","IfActiveWithRepetition","NoSigSendType";
+BA_DEF_ BO_  "GenMsgFastOnStart" INT 0 100000;
+BA_DEF_ SG_  "GenSigInactiveValue" INT 0 0;
+BA_DEF_ BO_  "GenMsgCycleTimeFast" INT 0 3600000;
+BA_DEF_ BO_  "GenMsgNrOfRepetition" INT 0 1000000;
+BA_DEF_ SG_  "GenSigStartValue" INT 0 2147483647;
+BA_DEF_ BO_  "GenMsgDelayTime" INT 0 1000;
+BA_DEF_ BO_  "GenMsgILSupport" ENUM  "No","Yes";
+BA_DEF_ BO_  "GenMsgStartDelayTime" INT 0 100000;
+BA_DEF_ BU_  "NodeLayerModules" STRING ;
+BA_DEF_ BU_  "ECU" STRING ;
+BA_DEF_ BU_  "NmJ1939SystemInstance" INT 0 15;
+BA_DEF_ BU_  "NmJ1939System" INT 0 127;
+BA_DEF_ BU_  "NmJ1939ManufacturerCode" INT 0 2047;
+BA_DEF_ BU_  "NmJ1939IndustryGroup" INT 0 7;
+BA_DEF_ BU_  "NmJ1939IdentityNumber" INT 0 2097151;
+BA_DEF_ BU_  "NmJ1939FunctionInstance" INT 0 7;
+BA_DEF_ BU_  "NmJ1939Function" INT 0 255;
+BA_DEF_ BU_  "NmJ1939ECUInstance" INT 0 3;
+BA_DEF_ BU_  "NmJ1939AAC" INT 0 1;
+BA_DEF_ BU_  "NmStationAddress" INT 0 255;
+BA_DEF_ BO_  "GenMsgSendType" ENUM  "cyclic","NotUsed","IfActive","NotUsed","NotUsed","NotUsed","NotUsed","NotUsed","noMsgSendType";
+BA_DEF_ BO_  "GenMsgRequestable" INT 0 1;
+BA_DEF_ BO_  "GenMsgCycleTime" INT 0 3600000;
+BA_DEF_ SG_  "SPN" INT 0 524287;
+BA_DEF_  "DBName" STRING ;
+BA_DEF_  "BusType" STRING ;
+BA_DEF_  "ProtocolType" STRING ;
+BA_DEF_ BO_  "VFrameFormat" ENUM  "StandardCAN","ExtendedCAN","reserved","J1939PG";
+BA_DEF_DEF_  "ILUsed" "Yes";
+BA_DEF_DEF_  "TpJ1939VarDlc" "No";
+BA_DEF_DEF_  "SigType" "Default";
+BA_DEF_DEF_  "GenSigEVName" "Env@Nodename_@Signame";
+BA_DEF_DEF_  "GenSigILSupport" "Yes";
+BA_DEF_DEF_  "GenSigSendType" "NoSigSendType";
+BA_DEF_DEF_  "GenMsgFastOnStart" 0;
+BA_DEF_DEF_  "GenSigInactiveValue" 0;
+BA_DEF_DEF_  "GenMsgCycleTimeFast" 0;
+BA_DEF_DEF_  "GenMsgNrOfRepetition" 0;
+BA_DEF_DEF_  "GenSigStartValue" 0;
+BA_DEF_DEF_  "GenMsgDelayTime" 0;
+BA_DEF_DEF_  "GenMsgILSupport" "Yes";
+BA_DEF_DEF_  "GenMsgStartDelayTime" 0;
+BA_DEF_DEF_  "NodeLayerModules" "";
+BA_DEF_DEF_  "ECU" "";
+BA_DEF_DEF_  "NmJ1939SystemInstance" 0;
+BA_DEF_DEF_  "NmJ1939System" 0;
+BA_DEF_DEF_  "NmJ1939ManufacturerCode" 0;
+BA_DEF_DEF_  "NmJ1939IndustryGroup" 0;
+BA_DEF_DEF_  "NmJ1939IdentityNumber" 0;
+BA_DEF_DEF_  "NmJ1939FunctionInstance" 0;
+BA_DEF_DEF_  "NmJ1939Function" 0;
+BA_DEF_DEF_  "NmJ1939ECUInstance" 0;
+BA_DEF_DEF_  "NmJ1939AAC" 0;
+BA_DEF_DEF_  "NmStationAddress" 254;
+BA_DEF_DEF_  "GenMsgSendType" "noMsgSendType";
+BA_DEF_DEF_  "GenMsgRequestable" 1;
+BA_DEF_DEF_  "GenMsgCycleTime" 0;
+BA_DEF_DEF_  "SPN" 0;
+BA_DEF_DEF_  "DBName" "";
+BA_DEF_DEF_  "BusType" "CAN";
+BA_DEF_DEF_  "ProtocolType" "J1939";
+BA_DEF_DEF_  "VFrameFormat" "J1939PG";
+BA_ "DBName" "______TBOX";
+BA_ "NmStationAddress" BU_ BMS 243;
+BA_ "NmStationAddress" BU_ VCU 239;
+BA_ "NmStationAddress" BU_ TBox 167;
+BA_ "GenMsgCycleTime" BO_ 2558775539 100;
+BA_ "GenMsgSendType" BO_ 2558775539 0;
+BA_ "VFrameFormat" BO_ 2558775539 1;
+BA_ "GenMsgCycleTime" BO_ 2558710003 100;
+BA_ "GenMsgSendType" BO_ 2558710003 0;
+BA_ "VFrameFormat" BO_ 2558710003 1;
+BA_ "GenMsgCycleTime" BO_ 2565001459 1000;
+BA_ "GenMsgSendType" BO_ 2565001459 0;
+BA_ "VFrameFormat" BO_ 2565001459 1;
+BA_ "GenMsgCycleTime" BO_ 2564935923 1000;
+BA_ "GenMsgSendType" BO_ 2564935923 0;
+BA_ "VFrameFormat" BO_ 2564935923 1;
+BA_ "VFrameFormat" BO_ 2566115571 1;
+BA_ "VFrameFormat" BO_ 2566050035 1;
+BA_ "GenMsgCycleTime" BO_ 2565984499 10000;
+BA_ "VFrameFormat" BO_ 2565984499 1;
+BA_ "GenMsgCycleTime" BO_ 2564944848 100;
+BA_ "VFrameFormat" BO_ 2564944848 1;
+BA_ "GenMsgRequestable" BO_ 2564944848 0;
+BA_ "GenMsgSendType" BO_ 2564944848 0;
+BA_ "GenMsgNrOfRepetition" BO_ 2564944848 3;
+BA_ "VFrameFormat" BO_ 2566891503 1;
+BA_ "GenMsgCycleTime" BO_ 2566891503 100;
+BA_ "GenMsgCycleTime" BO_ 2566846631 100;
+BA_ "VFrameFormat" BO_ 2566846631 1;
+BA_ "GenMsgCycleTime" BO_ 2566912167 100;
+BA_ "VFrameFormat" BO_ 2566912167 1;
+BA_ "GenSigStartValue" SG_ 2558710003 TotalCurrentOfBatteryPack 10000;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_17 17;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_16 16;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_15 15;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_14 14;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_13 13;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_12 12;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_11 11;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_10 10;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_9 9;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_8 8;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_7 7;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_6 6;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_5 5;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_4 4;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_3 3;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_2 2;
+BA_ "GenSigStartValue" SG_ 2564944848 VIN_1 1;
+BA_ "GenSigStartValue" SG_ 2566846631 NTC8 40;
+BA_ "GenSigStartValue" SG_ 2566846631 NTC7 40;
+BA_ "GenSigStartValue" SG_ 2566846631 NTC6 40;
+BA_ "GenSigStartValue" SG_ 2566846631 NTC5 40;
+BA_ "GenSigStartValue" SG_ 2566846631 NTC4 40;
+BA_ "GenSigStartValue" SG_ 2566846631 NTC3 40;
+BA_ "GenSigStartValue" SG_ 2566846631 NTC2 40;
+BA_ "GenSigStartValue" SG_ 2566846631 NTC1 40;
+VAL_ 2564935923 BatteryManufacturer 7 "BYD" 6 "EVE" 5 "LG" 4 "SAMSUN" 3 "MGL" 2 "Li Shen" 1 "CATL" ;
+VAL_ 2564944848 FrameSeq 3 "Frame3" 2 "Frame2" 1 "Frame1" ;
+VAL_ 2566891503 Handbrake 1 "Up" 0 "Down" ;
+VAL_ 2566891503 Shift 5 "Reserved" 4 "D" 3 "N" 2 "R" 1 "P" 0 "InValid" ;
+VAL_ 2566912167 TBoxFaultLevel 3 "Level 3" 2 "Level 2" 1 "Level 1" 0 "No Fault" ;
+VAL_ 2566912167 TBoxFaultCode 32 "NTC8 DisConnect" 31 "NTC7 DisConnect" 30 "NTC6 DisConnect" 29 "NTC5 DisConnect" 28 "NTC4 DisConnect" 27 "NTC3 DisConnect" 26 "NTC2 DisConnect" 25 "NTC1 DisConnect" 24 "NTC8 Level 3" 23 "NTC7 Level 3" 22 "NTC6 Level 3" 21 "NTC5 Level 3" 20 "NTC4 Level 3" 19 "NTC3 Level 3" 18 "NTC2 Level 3" 17 "NTC1 Level 3" 16 "NTC8 Level 2" 15 "NTC7 Level 2" 14 "NTC6 Level 2" 13 "NTC5 Level 2" 12 "NTC4 Level 2" 11 "NTC3 Level 2" 10 "NTC2 Level 2" 9 "NTC1 Level 2" 8 "NTC8 Level 1" 7 "NTC7 Level 1" 6 "NTC6 Level 1" 5 "NTC5 Level 1" 4 "NTC4 Level 1" 3 "NTC3 Level 1" 2 "NTC2 Level 1" 1 "NTC1 Level 1" 0 "Normal" ;
+VAL_ 2566912167 BatteryDisChargeConnect 3 "InValid" 2 "InValid" 1 "Connect" 0 "DisConnect" ;
+VAL_ 2566912167 BatteryConnect 3 "InValid" 2 "InValid" 1 "Connect" 0 "DisConnect" ;
+VAL_ 2566912167 BatteryChargeConnect 3 "InValid" 2 "InValid" 1 "Connect" 0 "DisConnect" ;
+VAL_ 2566912167 BatteryLock 3 "InValid" 2 "Lock" 1 "UnLock" 0 "Unknow" ;
+

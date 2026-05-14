@@ -7,6 +7,10 @@ pub(crate) fn tag_for_module(module: &str) -> &'static str {
         "can"
     } else if module == "tbox::modem" || module.contains("::modem") {
         "modem"
+    } else if module == "tbox::tcp_client" || module.contains("::remote") {
+        "remote"
+    } else if module == "tbox::vehicle" || module.contains("::vehicle") {
+        "vehicle"
     } else {
         "kernel"
     }
@@ -16,6 +20,8 @@ pub(crate) fn tag_name(tag: &str) -> &'static str {
     match tag {
         "modem" => ariel_os_boards::tbox_log::modem::TAG,
         "can" => ariel_os_boards::tbox_log::can::TAG,
+        "vehicle" => ariel_os_boards::tbox_log::vehicle::TAG,
+        "remote" => ariel_os_boards::tbox_log::remote::TAG,
         "kernel" => ariel_os_boards::tbox_log::kernel::TAG,
         _ => ariel_os_boards::tbox_log::kernel::TAG,
     }
@@ -25,8 +31,26 @@ pub(crate) fn enabled(tag: &str) -> bool {
     match tag {
         "modem" => ariel_os_boards::tbox_log::modem::ENABLED,
         "can" => ariel_os_boards::tbox_log::can::ENABLED,
+        "vehicle" => ariel_os_boards::tbox_log::vehicle::ENABLED,
+        "remote" => ariel_os_boards::tbox_log::remote::ENABLED,
         "kernel" => ariel_os_boards::tbox_log::kernel::ENABLED,
         _ => ariel_os_boards::tbox_log::kernel::ENABLED,
+    }
+}
+
+pub(crate) fn info_for_tag(tag_key: &str, args: fmt::Arguments<'_>) {
+    if enabled(tag_key) {
+        let tag = tag_name(tag_key);
+        let message = format_message(args);
+        ariel_os::log::info!("[{}] {}", tag, ariel_os::log::Display2Format(&message.as_str()));
+    }
+}
+
+pub(crate) fn warn_for_tag(tag_key: &str, args: fmt::Arguments<'_>) {
+    if enabled(tag_key) {
+        let tag = tag_name(tag_key);
+        let message = format_message(args);
+        ariel_os::log::warn!("[{}] {}", tag, ariel_os::log::Display2Format(&message.as_str()));
     }
 }
 

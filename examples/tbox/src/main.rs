@@ -6,7 +6,9 @@ mod tagged_log;
 mod can;
 mod modem;
 mod pins;
+mod remote;
 mod tcp_client;
+mod vehicle;
 
 use ariel_os::{
     gpio::{Level, Output},

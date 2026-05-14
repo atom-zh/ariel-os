@@ -67,11 +67,21 @@ pub mod tbox_log {
 
     pub mod modem {
         pub const TAG: &str = "modem";
-        pub const ENABLED: bool = false;
+        pub const ENABLED: bool = true;
     }
 
     pub mod can {
         pub const TAG: &str = "can";
+        pub const ENABLED: bool = true;
+    }
+
+    pub mod vehicle {
+        pub const TAG: &str = "vehicle";
+        pub const ENABLED: bool = true;
+    }
+
+    pub mod remote {
+        pub const TAG: &str = "remote";
         pub const ENABLED: bool = true;
     }
 }

@@ -28,9 +28,15 @@ targets:
         enabled: true
       modem:
         tag: modem
-        enabled: false
+        enabled: true
       can:
         tag: can
+        enabled: true
+      vehicle:
+        tag: vehicle
+        enabled: true
+      remote:
+        tag: remote
         enabled: true
     can:
       peripheral: CAN2

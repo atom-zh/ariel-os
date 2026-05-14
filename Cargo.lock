@@ -6116,6 +6116,7 @@ version = "0.0.0"
 dependencies = [
  "ariel-os",
  "ariel-os-boards",
+ "critical-section",
  "embassy-futures",
  "embassy-net",
  "embassy-net-ppp",
