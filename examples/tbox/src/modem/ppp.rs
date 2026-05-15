@@ -40,8 +40,8 @@ pub enum RunOutcome {
 
 pub(super) fn dial_candidate_by_index(index: u8) -> &'static str {
     match index % DIAL_CANDIDATE_COUNT {
-        0 => "AT+CGDATA=\"PPP\",1",
-        1 => "ATD*99#",
+        0 => "ATD*99#",
+        1 => "AT+CGDATA=\"PPP\",1",
         2 => "ATD*99***1#",
         _ => "ATD*98*1#",
     }

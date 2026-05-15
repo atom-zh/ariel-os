@@ -20,6 +20,7 @@ use super::ppp::{
     dial_candidate_by_index,
 };
 use super::uart::DmaUart;
+use super::set_device_id_from_imei;
 
 pub(super) async fn prepare_modem_with_autobaud(
     uart: &mut DmaUart<'_>,
@@ -215,6 +216,8 @@ pub(super) async fn prepare_modem_with_autobaud(
         }
     }
 
+    query_and_log_modem_identity(uart).await;
+
     run_optional_at_diag(uart, "AT+CPIN?").await;
     run_optional_at_diag(uart, "AT+CSQ").await;
     run_optional_at_diag(uart, "AT+COPS?").await;
@@ -307,6 +310,121 @@ pub(super) async fn prepare_modem_with_autobaud(
     advance_dial_strategy("all PPP dial commands failed before CONNECT");
 
     Err(ModemError::UnexpectedResponse)
+}
+
+async fn query_and_log_modem_identity(uart: &mut DmaUart<'_>) {
+    match query_digits_with_fallback(uart, "IMEI", "AT+CGSN", None, "AT+GSN", None).await {
+        Some(imei) => {
+            info!("modem IMEI: {}", imei.as_str());
+            match set_device_id_from_imei(imei.as_str()) {
+                Some(device_id) => info!(
+                    "remote device identifier set from IMEI last 8 digits: {:08}",
+                    device_id
+                ),
+                None => warn!("failed to derive remote device identifier from IMEI"),
+            }
+        }
+        None => warn!("failed to read modem IMEI before PPP dial"),
+    }
+
+    match query_digits_with_fallback(
+        uart,
+        "ICCID",
+        "AT+QCCID",
+        Some("+QCCID:"),
+        "AT+CCID",
+        Some("+CCID:"),
+    )
+    .await
+    {
+        Some(iccid) => info!("modem ICCID: {}", iccid.as_str()),
+        None => warn!("failed to read modem ICCID before PPP dial"),
+    }
+}
+
+async fn query_digits_with_fallback(
+    uart: &mut DmaUart<'_>,
+    name: &str,
+    primary_cmd: &str,
+    primary_prefix: Option<&str>,
+    fallback_cmd: &str,
+    fallback_prefix: Option<&str>,
+) -> Option<String<32>> {
+    match query_digit_identity(uart, primary_cmd, primary_prefix).await {
+        Some(value) => Some(value),
+        None => {
+            warn!(
+                "{} query failed with {}, trying {}",
+                name, primary_cmd, fallback_cmd
+            );
+            query_digit_identity(uart, fallback_cmd, fallback_prefix).await
+        }
+    }
+}
+
+async fn query_digit_identity(
+    uart: &mut DmaUart<'_>,
+    cmd: &str,
+    prefix: Option<&str>,
+) -> Option<String<32>> {
+    match with_timeout(
+        Duration::from_millis(MODEM_PROBE_TIMEOUT_MS),
+        query_digit_identity_inner(uart, cmd, prefix),
+    )
+    .await
+    {
+        Ok(Ok(value)) => Some(value),
+        Ok(Err(_)) | Err(_) => None,
+    }
+}
+
+async fn query_digit_identity_inner(
+    uart: &mut DmaUart<'_>,
+    cmd: &str,
+    prefix: Option<&str>,
+) -> Result<String<32>, ModemError<embedded_io_async_new::ErrorKind>> {
+    let mut value: String<32> = String::new();
+
+    send_at_parse(uart, cmd.as_bytes(), AtSuccess::Ok, |text| {
+        let Some(raw) = identity_payload(text, prefix) else {
+            return Ok(());
+        };
+
+        let mut candidate: String<32> = String::new();
+        copy_ascii_digits(&mut candidate, raw);
+        if candidate.len() >= 8 {
+            value.clear();
+            let _ = value.push_str(candidate.as_str());
+        }
+
+        Ok(())
+    })
+    .await?;
+
+    if value.is_empty() {
+        Err(ModemError::UnexpectedResponse)
+    } else {
+        Ok(value)
+    }
+}
+
+fn identity_payload<'a>(text: &'a str, prefix: Option<&str>) -> Option<&'a str> {
+    if text == "OK" || is_at_error_line(text) {
+        return None;
+    }
+
+    match prefix {
+        Some(prefix) => text.strip_prefix(prefix).map(str::trim),
+        None => Some(text.trim()),
+    }
+}
+
+fn copy_ascii_digits(out: &mut String<32>, text: &str) {
+    for byte in text.bytes() {
+        if byte.is_ascii_digit() {
+            let _ = out.push(byte as char);
+        }
+    }
 }
 
 async fn run_optional_at_diag(uart: &mut DmaUart<'_>, cmd: &str) {

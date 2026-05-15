@@ -13,7 +13,7 @@ use static_cell::StaticCell;
 use crate::modem::log_serial_bytes;
 use crate::remote;
 
-const DEFAULT_SOCKET_HOST: &str = "tbox.uatiothub.rhecube.com";
+const DEFAULT_SOCKET_HOST: &str = "101.132.254.135";
 const DEFAULT_SOCKET_PORT: u16 = 8089;
 const TCP_CONNECT_TIMEOUT_SECS: u64 = 30;
 const TCP_IO_TIMEOUT_SECS: u64 = 10;
@@ -115,25 +115,21 @@ async fn run_connection(
         closed_by_reset: false,
         closed_by_send_failure: false,
     };
-    let mut sent_device_info = false;
     let mut heartbeat_ticks: u32 = 0;
 
-    loop {
-        if !sent_device_info {
-            let Some(payload) = remote::build_device_info_packet(next_sequence(message_counter)) else {
-                warn!("remote device-info packet build failed");
-                outcome.closed_by_send_failure = true;
-                break;
-            };
-            if !send_payload(socket, host, port, message_counter, "device-info", payload.as_slice()).await {
-                outcome.closed_by_send_failure = true;
-                break;
-            }
-            outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
-            sent_device_info = true;
-        }
+    let Some(payload) = remote::build_device_info_packet() else {
+        warn!("remote device-info packet build failed");
+        outcome.closed_by_send_failure = true;
+        return outcome;
+    };
+    if !send_payload(socket, host, port, message_counter, "device-info", payload.as_slice()).await {
+        outcome.closed_by_send_failure = true;
+        return outcome;
+    }
+    outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
 
-        let Some(heartbeat) = remote::build_heartbeat_packet(next_sequence(message_counter)) else {
+    loop {
+        let Some(heartbeat) = remote::build_heartbeat_packet() else {
             warn!("remote heartbeat packet build failed");
             outcome.closed_by_send_failure = true;
             break;
@@ -145,8 +141,30 @@ async fn run_connection(
         outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
         heartbeat_ticks = heartbeat_ticks.saturating_add(1);
 
+        let Some(weighing) = remote::build_weighing_packet() else {
+            warn!("remote weighing packet build failed");
+            outcome.closed_by_send_failure = true;
+            break;
+        };
+        if !send_payload(socket, host, port, message_counter, "weighing", weighing.as_slice()).await {
+            outcome.closed_by_send_failure = true;
+            break;
+        }
+        outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
+
+        let Some(work_hour) = remote::build_work_hour_packet() else {
+            warn!("remote work-hour packet build failed");
+            outcome.closed_by_send_failure = true;
+            break;
+        };
+        if !send_payload(socket, host, port, message_counter, "work-hour", work_hour.as_slice()).await {
+            outcome.closed_by_send_failure = true;
+            break;
+        }
+        outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
+
         if heartbeat_ticks % 2 == 0 {
-            let Some(detail) = remote::build_battery_detail_packet(next_sequence(message_counter)) else {
+            let Some(detail) = remote::build_battery_detail_packet() else {
                 warn!("remote battery-detail packet build failed");
                 outcome.closed_by_send_failure = true;
                 break;
@@ -227,6 +245,7 @@ async fn send_payload(
         port,
     );
     log_serial_bytes("UART3 PPP TX", payload);
+    log_cloud_payload_hex(current_id, label, payload);
 
     for write_try in 1..=TCP_WRITE_RETRY_MAX {
         match socket.write_all(payload).await {
@@ -264,8 +283,32 @@ async fn send_payload(
     false
 }
 
-fn next_sequence(message_counter: &u64) -> u8 {
-    message_counter.wrapping_add(1) as u8
+fn log_cloud_payload_hex(message_id: u64, label: &str, payload: &[u8]) {
+    info!(
+        "TCP send #{} {} cloud payload HEX ({} bytes)",
+        message_id,
+        label,
+        payload.len()
+    );
+
+    let mut offset = 0usize;
+    while offset < payload.len() {
+        let end = (offset + 16).min(payload.len());
+        let mut line: String<80> = String::new();
+        let _ = write!(&mut line, "{:04X}:", offset);
+
+        for &byte in &payload[offset..end] {
+            let _ = write!(&mut line, " {:02X}", byte);
+        }
+
+        info!(
+            "TCP send #{} {} HEX {}",
+            message_id,
+            label,
+            line.as_str()
+        );
+        offset = end;
+    }
 }
 
 fn tcp_rx_buf() -> &'static mut [u8; 512] {
