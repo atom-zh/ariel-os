@@ -16,9 +16,10 @@ use crate::remote;
 const DEFAULT_SOCKET_HOST: &str = "101.132.254.135";
 const DEFAULT_SOCKET_PORT: u16 = 8089;
 const TCP_CONNECT_TIMEOUT_SECS: u64 = 30;
-const TCP_IO_TIMEOUT_SECS: u64 = 10;
+const TCP_IO_TIMEOUT_SECS: u64 = 180;
+const TCP_KEEP_ALIVE_INTERVAL_SECS: u64 = 60;
 const TCP_SEND_INTERVAL_SECS: u64 = remote::HEARTBEAT_PERIOD_SECS;
-const TCP_READ_PROBE_TIMEOUT_MS: u64 = 80;
+const TCP_REPLY_TIMEOUT_MS: u64 = 2_000;
 const TCP_WRITE_RETRY_MAX: u8 = 3;
 const TCP_WRITE_RETRY_BACKOFF_SECS: u64 = 1;
 const TCP_LONG_MODE_RESET_THRESHOLD: u8 = 3;
@@ -75,6 +76,21 @@ fn log_adaptive_mode(short_mode_remaining: u32) {
     }
 }
 
+fn configure_connected_socket(socket: &mut TcpSocket<'_>) {
+    socket.set_timeout(Some(Duration::from_secs(TCP_IO_TIMEOUT_SECS)));
+    socket.set_keep_alive(Some(Duration::from_secs(TCP_KEEP_ALIVE_INTERVAL_SECS)));
+    socket.set_nagle_enabled(false);
+    info!(
+        "TCP long-connection keepalive configured: idle-timeout={}s keep-alive={}s nagle=off",
+        TCP_IO_TIMEOUT_SECS, TCP_KEEP_ALIVE_INTERVAL_SECS
+    );
+}
+
+fn configure_connecting_socket(socket: &mut TcpSocket<'_>) {
+    socket.set_timeout(Some(Duration::from_secs(TCP_CONNECT_TIMEOUT_SECS)));
+    socket.set_keep_alive(None);
+}
+
 fn update_adaptive_state(
     outcome: &ConnectionOutcome,
     early_reset_streak: &mut u8,
@@ -128,6 +144,11 @@ async fn run_connection(
     }
     outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
 
+    if probe_cloud_read(socket, socket_read_buf, message_counter).await {
+        outcome.closed_by_reset = true;
+        return outcome;
+    }
+
     loop {
         let Some(heartbeat) = remote::build_heartbeat_packet() else {
             warn!("remote heartbeat packet build failed");
@@ -141,6 +162,11 @@ async fn run_connection(
         outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
         heartbeat_ticks = heartbeat_ticks.saturating_add(1);
 
+        if probe_cloud_read(socket, socket_read_buf, message_counter).await {
+            outcome.closed_by_reset = true;
+            break;
+        }
+
         let Some(weighing) = remote::build_weighing_packet() else {
             warn!("remote weighing packet build failed");
             outcome.closed_by_send_failure = true;
@@ -151,6 +177,11 @@ async fn run_connection(
             break;
         }
         outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
+
+        if probe_cloud_read(socket, socket_read_buf, message_counter).await {
+            outcome.closed_by_reset = true;
+            break;
+        }
 
         let Some(work_hour) = remote::build_work_hour_packet() else {
             warn!("remote work-hour packet build failed");
@@ -163,6 +194,11 @@ async fn run_connection(
         }
         outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
 
+        if probe_cloud_read(socket, socket_read_buf, message_counter).await {
+            outcome.closed_by_reset = true;
+            break;
+        }
+
         if heartbeat_ticks % 2 == 0 {
             let Some(detail) = remote::build_battery_detail_packet() else {
                 warn!("remote battery-detail packet build failed");
@@ -174,6 +210,11 @@ async fn run_connection(
                 break;
             }
             outcome.sent_this_connection = outcome.sent_this_connection.saturating_add(1);
+
+            if probe_cloud_read(socket, socket_read_buf, message_counter).await {
+                outcome.closed_by_reset = true;
+                break;
+            }
         }
 
         if *short_mode_remaining > 0 {
@@ -185,45 +226,54 @@ async fn run_connection(
             break;
         }
 
-        match with_timeout(
-            Duration::from_millis(TCP_READ_PROBE_TIMEOUT_MS),
-            socket.read(socket_read_buf),
-        )
-        .await
-        {
-            Ok(Ok(0)) => {
-                warn!("TCP peer closed connection after send #{}", *message_counter);
-                outcome.closed_by_reset = true;
-                break;
-            }
-            Ok(Ok(len)) => {
-                info!("TCP receive after send #{}: {} bytes", *message_counter, len);
-                log_serial_bytes("UART3 PPP RX", &socket_read_buf[..len]);
-            }
-            Ok(Err(err)) => {
-                let mut err_text: String<64> = String::new();
-                let _ = write!(&mut err_text, "{:?}", err);
-
-                if err_text.contains("ConnectionReset")
-                    || err_text.contains("ConnectionAborted")
-                    || err_text.contains("ConnectionClosed")
-                {
-                    warn!(
-                        "TCP connection lost after send #{} ({}), reconnecting",
-                        *message_counter,
-                        err_text.as_str()
-                    );
-                    outcome.closed_by_reset = true;
-                    break;
-                }
-            }
-            Err(_) => {}
-        }
-
         Timer::after_secs(TCP_SEND_INTERVAL_SECS).await;
     }
 
     outcome
+}
+
+async fn probe_cloud_read(
+    socket: &mut TcpSocket<'_>,
+    socket_read_buf: &mut [u8; 256],
+    message_counter: &u64,
+) -> bool {
+    match with_timeout(
+        Duration::from_millis(TCP_REPLY_TIMEOUT_MS),
+        socket.read(socket_read_buf),
+    )
+    .await
+    {
+        Ok(Ok(0)) => {
+            warn!("TCP peer closed connection after send #{}", *message_counter);
+            true
+        }
+        Ok(Ok(len)) => {
+            info!("TCP receive after send #{}: {} bytes", *message_counter, len);
+            log_serial_bytes("UART3 PPP RX", &socket_read_buf[..len]);
+            log_cloud_receive_hex(*message_counter, &socket_read_buf[..len]);
+            remote::handle_downlink(&socket_read_buf[..len]);
+            false
+        }
+        Ok(Err(err)) => {
+            let mut err_text: String<64> = String::new();
+            let _ = write!(&mut err_text, "{:?}", err);
+
+            if err_text.contains("ConnectionReset")
+                || err_text.contains("ConnectionAborted")
+                || err_text.contains("ConnectionClosed")
+            {
+                warn!(
+                    "TCP connection lost after send #{} ({}), reconnecting",
+                    *message_counter,
+                    err_text.as_str()
+                );
+                true
+            } else {
+                false
+            }
+        }
+        Err(_) => false,
+    }
 }
 
 async fn send_payload(
@@ -311,6 +361,32 @@ fn log_cloud_payload_hex(message_id: u64, label: &str, payload: &[u8]) {
     }
 }
 
+fn log_cloud_receive_hex(message_id: u64, payload: &[u8]) {
+    info!(
+        "TCP receive after send #{} remote cloud payload HEX ({} bytes)",
+        message_id,
+        payload.len()
+    );
+
+    let mut offset = 0usize;
+    while offset < payload.len() {
+        let end = (offset + 16).min(payload.len());
+        let mut line: String<80> = String::new();
+        let _ = write!(&mut line, "{:04X}:", offset);
+
+        for &byte in &payload[offset..end] {
+            let _ = write!(&mut line, " {:02X}", byte);
+        }
+
+        info!(
+            "TCP receive after send #{} remote HEX {}",
+            message_id,
+            line.as_str()
+        );
+        offset = end;
+    }
+}
+
 fn tcp_rx_buf() -> &'static mut [u8; 512] {
     #[expect(
         unsafe_code,
@@ -362,7 +438,7 @@ pub async fn run(stack: Stack<'static>) {
     loop {
         connect_attempt += 1;
         let mut socket = TcpSocket::new(stack, &mut rx_buffer[..], &mut tx_buffer[..]);
-        socket.set_timeout(Some(Duration::from_secs(TCP_CONNECT_TIMEOUT_SECS)));
+        configure_connecting_socket(&mut socket);
 
         info!(
             "TCP connect attempt #{}: starting handshake to {}:{} over PPP",
@@ -374,7 +450,7 @@ pub async fn run(stack: Stack<'static>) {
                     "TCP connect attempt #{} succeeded: connected to {}:{}",
                     connect_attempt, host, port,
                 );
-                socket.set_timeout(Some(Duration::from_secs(TCP_IO_TIMEOUT_SECS)));
+                configure_connected_socket(&mut socket);
 
                 log_adaptive_mode(short_mode_remaining);
 

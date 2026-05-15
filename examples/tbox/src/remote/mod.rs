@@ -10,6 +10,6 @@ mod state;
 pub use protocol::{
     HEARTBEAT_PERIOD_SECS, RECONNECT_DELAY_SECS, build_battery_detail_packet,
     build_device_info_packet, build_heartbeat_packet, build_weighing_packet,
-    build_work_hour_packet,
+    build_work_hour_packet, handle_downlink,
 };
 pub use state::update_from_vehicle_message;

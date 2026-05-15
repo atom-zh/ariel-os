@@ -42,7 +42,11 @@ pub(crate) fn info_for_tag(tag_key: &str, args: fmt::Arguments<'_>) {
     if enabled(tag_key) {
         let tag = tag_name(tag_key);
         let message = format_message(args);
-        ariel_os::log::info!("[{}] {}", tag, ariel_os::log::Display2Format(&message.as_str()));
+        ariel_os::log::info!(
+            "[{}] {}",
+            tag,
+            ariel_os::log::Display2Format(&message.as_str())
+        );
     }
 }
 
@@ -50,7 +54,11 @@ pub(crate) fn warn_for_tag(tag_key: &str, args: fmt::Arguments<'_>) {
     if enabled(tag_key) {
         let tag = tag_name(tag_key);
         let message = format_message(args);
-        ariel_os::log::warn!("[{}] {}", tag, ariel_os::log::Display2Format(&message.as_str()));
+        ariel_os::log::warn!(
+            "[{}] {}",
+            tag,
+            ariel_os::log::Display2Format(&message.as_str())
+        );
     }
 }
 

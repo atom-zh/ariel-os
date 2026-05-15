@@ -1,3 +1,5 @@
+use crate::remote;
+use crate::vehicle::{ACTIVE_PROFILE, VehicleCanFrame, VehicleCanProfile};
 use ariel_os::{
     gpio::{Level, Output},
     log::Debug2Format,
@@ -5,8 +7,6 @@ use ariel_os::{
 };
 use core::fmt::Write as _;
 use core::num::{NonZeroU8, NonZeroU16};
-use crate::remote;
-use crate::vehicle::{ACTIVE_PROFILE, VehicleCanFrame, VehicleCanProfile};
 use embassy_futures::join::join;
 use embassy_stm32::{bind_interrupts, can as stm_can, pac, rcc};
 use heapless::String;
@@ -297,11 +297,7 @@ fn take_can_resources(
     embassy_stm32::Peri<'static, BoardCanRxPin>,
     embassy_stm32::Peri<'static, BoardCanTxPin>,
 ) {
-    (
-        ariel_os_boards::can::steal_peripheral(),
-        can_rx,
-        can_tx,
-    )
+    (ariel_os_boards::can::steal_peripheral(), can_rx, can_tx)
 }
 
 fn log_can_bytes(prefix: &str, bytes: &[u8]) {

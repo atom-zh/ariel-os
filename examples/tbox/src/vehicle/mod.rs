@@ -40,8 +40,16 @@ pub trait VehicleCanProfile {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ParseError {
-    InvalidDlc { id: u32, expected: usize, actual: usize },
-    Checksum { id: u32, expected: u8, actual: u8 },
+    InvalidDlc {
+        id: u32,
+        expected: usize,
+        actual: usize,
+    },
+    Checksum {
+        id: u32,
+        expected: u8,
+        actual: u8,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

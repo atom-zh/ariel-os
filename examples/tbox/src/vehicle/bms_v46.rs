@@ -24,11 +24,15 @@ impl VehicleCanProfile for BmsV46Profile {
             ID_BATTERY_SN_4 => VehicleMessage::BatteryIdentityChunk(parse_identity_chunk(data, 4)),
             ID_BATT_INFO_1 => VehicleMessage::BatteryNameplate(parse_battery_nameplate(data)),
             ID_BATT_INFO_2 => VehicleMessage::BatteryPackLayout(parse_battery_pack_layout(data)),
-            ID_TEMP_SAMPLES => VehicleMessage::TemperatureSamples(parse_temperature_samples(frame.id, data)),
+            ID_TEMP_SAMPLES => {
+                VehicleMessage::TemperatureSamples(parse_temperature_samples(frame.id, data))
+            }
             ID_CELL_VOLTAGE_1 | ID_CELL_VOLTAGE_2 => {
                 VehicleMessage::CellVoltageSamples(parse_cell_voltage_samples(frame.id, data))
             }
-            ID_EXPANDABLE_PACK_VOLTAGE => VehicleMessage::PackVoltage(parse_expandable_pack_voltage(data)),
+            ID_EXPANDABLE_PACK_VOLTAGE => {
+                VehicleMessage::PackVoltage(parse_expandable_pack_voltage(data))
+            }
             ID_BMS_STATUS_0 => VehicleMessage::BmsStatus0(parse_bms_status0(data)),
             ID_BMS_STATUS_1 => {
                 check_xor(frame.id, data)?;
@@ -41,12 +45,16 @@ impl VehicleCanProfile for BmsV46Profile {
             ID_CELL_VOLTAGE_MIN_AND_RELAY_TEMP => {
                 VehicleMessage::CellVoltageMinimum(parse_cell_voltage_min(data))
             }
-            ID_CHARGE_CONNECTOR_TEMPS => {
-                VehicleMessage::ChargeConnectorTemperatures(parse_charge_connector_temperatures(data))
-            }
+            ID_CHARGE_CONNECTOR_TEMPS => VehicleMessage::ChargeConnectorTemperatures(
+                parse_charge_connector_temperatures(data),
+            ),
             ID_VERSION_INFO => VehicleMessage::VersionInfo(parse_version_info(data)),
-            ID_WATER_LOOP_TEMPS => VehicleMessage::WaterLoopTemperatures(parse_water_loop_temperatures(data)),
-            ID_EXTENDED_RELAY_STATUS => VehicleMessage::ExtendedRelayStatus(parse_extended_relay_status(data)),
+            ID_WATER_LOOP_TEMPS => {
+                VehicleMessage::WaterLoopTemperatures(parse_water_loop_temperatures(data))
+            }
+            ID_EXTENDED_RELAY_STATUS => {
+                VehicleMessage::ExtendedRelayStatus(parse_extended_relay_status(data))
+            }
             ID_PACK_POLE_STATUS => VehicleMessage::PackPoleStatus(parse_pack_pole_status(data)),
             ID_ENERGY_CHG_DISCHG_24 => VehicleMessage::EnergyCounter(parse_energy_24(
                 data,
@@ -116,8 +124,12 @@ impl VehicleCanProfile for BmsV46Profile {
             )),
             ID_DBC_VIN => VehicleMessage::VinChunk(parse_vin_chunk(data)),
             ID_DBC_VEHICLE_INFO => VehicleMessage::VehicleInfo(parse_vehicle_info(data)),
-            ID_BBOX_AUTH_REQUEST | ID_BBOX_AUTH_RESPONSE | ID_B2V_ST11 | ID_OBC_CHARGE_CTRL
-            | ID_STORAGE_FAULT | ID_BMS_CLOUD_INFO => VehicleMessage::KnownReserved { id: frame.id },
+            ID_BBOX_AUTH_REQUEST
+            | ID_BBOX_AUTH_RESPONSE
+            | ID_B2V_ST11
+            | ID_OBC_CHARGE_CTRL
+            | ID_STORAGE_FAULT
+            | ID_BMS_CLOUD_INFO => VehicleMessage::KnownReserved { id: frame.id },
             _ => return Ok(None),
         };
 
@@ -224,7 +236,11 @@ fn parse_identity_chunk(data: [u8; 8], chunk_index: u8) -> BatteryIdentityChunk 
 
     BatteryIdentityChunk {
         chunk_index,
-        declared_len: if chunk_index == 1 { Some(data[1] >> 3) } else { None },
+        declared_len: if chunk_index == 1 {
+            Some(data[1] >> 3)
+        } else {
+            None
+        },
         manufacturer: if chunk_index == 1 {
             Some(u16::from(data[1] & 0b111))
         } else {
@@ -429,13 +445,18 @@ fn parse_charge_connector_temperatures(data: [u8; 8]) -> ChargeConnectorTemperat
 fn parse_version_info(data: [u8; 8]) -> VersionInfo {
     let mut bytes = [0xff; 7];
     bytes.copy_from_slice(&data[1..8]);
-    VersionInfo { kind: data[0], bytes }
+    VersionInfo {
+        kind: data[0],
+        bytes,
+    }
 }
 
 fn parse_water_loop_temperatures(data: [u8; 8]) -> WaterLoopTemperatures {
     WaterLoopTemperatures {
         sequence: data[0],
-        pack1_or_3_out_deci_c: temp_deci_c_12(u16::from(data[1]) | (u16::from(data[2] & 0x0f) << 8)),
+        pack1_or_3_out_deci_c: temp_deci_c_12(
+            u16::from(data[1]) | (u16::from(data[2] & 0x0f) << 8),
+        ),
         pack1_or_3_in_deci_c: temp_deci_c_12(u16::from(data[3]) | (u16::from(data[2] >> 4) << 8)),
         pack2_or_4_in_deci_c: temp_deci_c_12(u16::from(data[4]) | (u16::from(data[5] & 0x0f) << 8)),
         pack2_or_4_out_deci_c: temp_deci_c_12(u16::from(data[6]) | (u16::from(data[5] >> 4) << 8)),
@@ -450,8 +471,13 @@ fn parse_extended_relay_status(data: [u8; 8]) -> ExtendedRelayStatus {
         charge_positive3_state: bits(data[1], 4, 0b11),
         charge_negative4_state: bits(data[2], 6, 0b11),
         charge_positive4_state: bits(data[2], 4, 0b11),
-        lead_acid_voltage_v: if data[3] & 0x3f == 0x3f { None } else { Some(data[3] & 0x3f) },
-        bms_charge_allowed_current_deci_a: valid_u16(le_u16(data, 4)).map(|raw| i32::from(raw) - 20_000),
+        lead_acid_voltage_v: if data[3] & 0x3f == 0x3f {
+            None
+        } else {
+            Some(data[3] & 0x3f)
+        },
+        bms_charge_allowed_current_deci_a: valid_u16(le_u16(data, 4))
+            .map(|raw| i32::from(raw) - 20_000),
         charge_stop_reason: data[6],
     }
 }

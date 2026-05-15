@@ -1,8 +1,8 @@
-use critical_section::Mutex;
 use core::cell::RefCell;
+use critical_section::Mutex;
 
 use crate::vehicle::{
-    CapacityCounterKind, EnergyCounterKind, VehicleMessage, BatteryIdentityChunk, VinChunk,
+    BatteryIdentityChunk, CapacityCounterKind, EnergyCounterKind, VehicleMessage, VinChunk,
 };
 
 static STATE: Mutex<RefCell<RemoteState>> = Mutex::new(RefCell::new(RemoteState::new()));
@@ -142,7 +142,9 @@ impl RemoteState {
                 self.snapshot.min_cell_index = minimum.min_cell_index;
             }
             VehicleMessage::VersionInfo(version) if version.kind == 1 => {
-                self.snapshot.bms_version.copy_from_slice(&version.bytes[..6]);
+                self.snapshot
+                    .bms_version
+                    .copy_from_slice(&version.bytes[..6]);
             }
             VehicleMessage::EnergyCounter(counter) => match counter.kind {
                 EnergyCounterKind::ChargeDischarge24 | EnergyCounterKind::ChargeDischarge32 => {
@@ -165,7 +167,8 @@ impl RemoteState {
             },
             VehicleMessage::VehicleInfo(info) => {
                 self.snapshot.total_mileage_deci_km = info.total_mileage_deci_km;
-                self.snapshot.speed_kph = info.speed_1_256_kph.map(|raw| (raw / 256).min(254) as u8);
+                self.snapshot.speed_kph =
+                    info.speed_1_256_kph.map(|raw| (raw / 256).min(254) as u8);
                 self.snapshot.shift = Some(match info.shift {
                     1 => 1,
                     2 => 2,
@@ -199,7 +202,12 @@ impl RemoteState {
             4 => 20,
             _ => return,
         };
-        copy_partial(&mut self.snapshot.battery_sn, offset, &chunk.bytes, chunk.valid_bytes);
+        copy_partial(
+            &mut self.snapshot.battery_sn,
+            offset,
+            &chunk.bytes,
+            chunk.valid_bytes,
+        );
     }
 
     fn apply_vin_chunk(&mut self, chunk: VinChunk) {
@@ -209,7 +217,12 @@ impl RemoteState {
             3 => 14,
             _ => return,
         };
-        copy_partial(&mut self.snapshot.vin, offset, &chunk.bytes, chunk.valid_bytes);
+        copy_partial(
+            &mut self.snapshot.vin,
+            offset,
+            &chunk.bytes,
+            chunk.valid_bytes,
+        );
     }
 }
 
@@ -221,7 +234,12 @@ pub fn snapshot() -> RemoteSnapshot {
     critical_section::with(|cs| STATE.borrow(cs).borrow().snapshot)
 }
 
-fn copy_partial<const N: usize, const M: usize>(dst: &mut [u8; N], offset: usize, src: &[u8; M], len: usize) {
+fn copy_partial<const N: usize, const M: usize>(
+    dst: &mut [u8; N],
+    offset: usize,
+    src: &[u8; M],
+    len: usize,
+) {
     let count = len.min(M).min(N.saturating_sub(offset));
     if count > 0 {
         dst[offset..offset + count].copy_from_slice(&src[..count]);

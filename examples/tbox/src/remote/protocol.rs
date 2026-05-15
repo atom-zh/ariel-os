@@ -20,6 +20,8 @@ const HEADER: [u8; 2] = [0xd2, 0xcf];
 const PROTOCOL_KEY: u32 = 0x5cad_f34e;
 const VERSION: u8 = 0x04;
 const DEFAULT_DEVICE_ID: u32 = 0;
+const COMMAND_TIME_SYNC: u8 = 0xa3;
+const MAX_TIME_DRIFT_SECS: u32 = 2;
 
 static PACKET_SEQUENCE: AtomicU8 = AtomicU8::new(0);
 
@@ -37,6 +39,30 @@ pub fn build_device_info_packet() -> Option<Packet> {
     push_all(&mut data, &state.vin)?;
     push_repeat(&mut data, 0xff, 8)?; // VCU version unknown
     build_packet(COMMAND_DEVICE_INFO, &data)
+}
+
+pub fn handle_downlink(bytes: &[u8]) {
+    let mut offset = 0usize;
+    while offset + 4 <= bytes.len() {
+        let Some(start) = find_header(&bytes[offset..]) else {
+            break;
+        };
+        offset += start;
+
+        if offset + 4 > bytes.len() {
+            break;
+        }
+
+        let length = u16::from_be_bytes([bytes[offset + 2], bytes[offset + 3]]) as usize;
+        let frame_len = length.saturating_add(4);
+        if length < 9 || offset + frame_len > bytes.len() {
+            break;
+        }
+
+        let frame = &bytes[offset..offset + frame_len];
+        handle_downlink_frame(frame);
+        offset += frame_len;
+    }
 }
 
 pub fn build_heartbeat_packet() -> Option<Packet> {
@@ -178,6 +204,66 @@ fn build_packet(command: u8, data: &[u8]) -> Option<Packet> {
     let crc = crc16_protocol(&crc_input);
     push_u16_raw_be(&mut packet, crc)?;
     Some(packet)
+}
+
+fn find_header(bytes: &[u8]) -> Option<usize> {
+    bytes.windows(HEADER.len()).position(|window| window == HEADER)
+}
+
+fn handle_downlink_frame(frame: &[u8]) {
+    if frame.len() < 13 || frame[0..2] != HEADER {
+        return;
+    }
+
+    if !verify_frame_crc(frame) {
+        warn!("remote downlink ignored: CRC mismatch ({} bytes)", frame.len());
+        return;
+    }
+
+    let command = frame[10];
+    let data = &frame[11..frame.len() - 2];
+    if command == COMMAND_TIME_SYNC {
+        handle_time_sync(data);
+    }
+}
+
+fn verify_frame_crc(frame: &[u8]) -> bool {
+    if frame.len() < 2 {
+        return false;
+    }
+
+    let expected = u16::from_be_bytes([frame[frame.len() - 2], frame[frame.len() - 1]]);
+    let mut crc_input = Packet::new();
+    if push_u32_raw_be(&mut crc_input, PROTOCOL_KEY).is_none()
+        || push_all(&mut crc_input, &frame[..frame.len() - 2]).is_none()
+    {
+        return false;
+    }
+
+    crc16_protocol(&crc_input) == expected
+}
+
+fn handle_time_sync(data: &[u8]) {
+    if data.len() < 6 {
+        warn!("remote time-sync ignored: payload too short ({})", data.len());
+        return;
+    }
+
+    let time = [data[0], data[1], data[2], data[3], data[4], data[5]];
+    match modem::sync_report_time_if_drift_exceeds(time, MAX_TIME_DRIFT_SECS) {
+        Some(drift) if drift.unsigned_abs() > MAX_TIME_DRIFT_SECS => info!(
+            "remote time-sync applied: {:02}/{:02}/{:02} {:02}:{:02}:{:02}, drift={}s",
+            time[0], time[1], time[2], time[3], time[4], time[5], drift
+        ),
+        Some(drift) => info!(
+            "remote time-sync kept local clock: server {:02}/{:02}/{:02} {:02}:{:02}:{:02}, drift={}s",
+            time[0], time[1], time[2], time[3], time[4], time[5], drift
+        ),
+        None => warn!(
+            "remote time-sync ignored: invalid server time {:02}/{:02}/{:02} {:02}:{:02}:{:02}",
+            time[0], time[1], time[2], time[3], time[4], time[5]
+        ),
+    }
 }
 
 fn next_sequence() -> u8 {
