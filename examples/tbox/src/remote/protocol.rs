@@ -96,9 +96,7 @@ pub fn build_heartbeat_packet() -> Option<Packet> {
     push_u24_be(&mut data, state.total_plug_charge_deci_kwh)?;
     push_u24_be(&mut data, state.total_swap_charge_deci_kwh)?;
     push_u24_be(&mut data, state.total_regen_deci_kwh)?;
-    push_battery_identity_header(&mut data, &state)?;
-    push_all(&mut data, &state.battery_sn)?;
-    push_all(&mut data, &state.vin)?;
+    push_battery_identity(&mut data, &state)?;
 
     build_packet(COMMAND_HEARTBEAT, &data)
 }
@@ -193,7 +191,10 @@ fn device_id() -> u32 {
 }
 
 fn push_time_default<const N: usize>(data: &mut Vec<u8, N>) -> Option<()> {
-    push_repeat(data, 0, 6)
+    match modem::report_time() {
+        Some(time) => push_all(data, &time),
+        None => push_repeat(data, 0, 6),
+    }
 }
 
 fn push_total_current<const N: usize>(data: &mut Vec<u8, N>, current_deci_a: Option<i32>) -> Option<()> {
@@ -208,10 +209,13 @@ fn push_total_current<const N: usize>(data: &mut Vec<u8, N>, current_deci_a: Opt
     push_u16_be(data, encoded)
 }
 
-fn push_battery_identity_header<const N: usize>(data: &mut Vec<u8, N>, state: &RemoteSnapshot) -> Option<()> {
-    let manufacturer = state.battery_manufacturer.unwrap_or(0).min(0x07ff);
-    let raw = manufacturer;
-    push_u16_raw_be(data, raw)
+fn push_battery_identity<const N: usize>(data: &mut Vec<u8, N>, state: &RemoteSnapshot) -> Option<()> {
+    let sn_len = state.battery_sn_len.unwrap_or(0).min(27);
+    let manufacturer = state.battery_manufacturer.unwrap_or(0).min(0x07) as u8;
+
+    data.push(sn_len << 3).ok()?;
+    data.push(manufacturer).ok()?;
+    push_all(data, &state.battery_sn[..sn_len as usize])
 }
 
 fn push_temp_c<const N: usize>(data: &mut Vec<u8, N>, temp_c: Option<i16>) -> Option<()> {

@@ -20,7 +20,7 @@ use super::ppp::{
     dial_candidate_by_index,
 };
 use super::uart::DmaUart;
-use super::set_device_id_from_imei;
+use super::{set_device_id_from_imei, set_report_time};
 
 pub(super) async fn prepare_modem_with_autobaud(
     uart: &mut DmaUart<'_>,
@@ -236,6 +236,8 @@ pub(super) async fn prepare_modem_with_autobaud(
         return Err(ModemError::UnexpectedResponse);
     }
 
+    query_and_store_modem_time(uart).await;
+
     match with_timeout(
         Duration::from_millis(MODEM_ATTACH_TIMEOUT_MS),
         send_expect(uart, "AT+CGATT=1", "OK"),
@@ -342,6 +344,22 @@ async fn query_and_log_modem_identity(uart: &mut DmaUart<'_>) {
     }
 }
 
+async fn query_and_store_modem_time(uart: &mut DmaUart<'_>) {
+    match query_value(uart, "AT+CCLK?", "+CCLK:").await {
+        Some(value) => match parse_modem_clock(value.as_str()) {
+            Some(time) => {
+                set_report_time(time);
+                info!(
+                    "modem network time: {:02}/{:02}/{:02} {:02}:{:02}:{:02}",
+                    time[0], time[1], time[2], time[3], time[4], time[5]
+                );
+            }
+            None => warn!("failed to parse modem network time: {}", value.as_str()),
+        },
+        None => warn!("failed to read modem network time via AT+CCLK?"),
+    }
+}
+
 async fn query_digits_with_fallback(
     uart: &mut DmaUart<'_>,
     name: &str,
@@ -425,6 +443,44 @@ fn copy_ascii_digits(out: &mut String<32>, text: &str) {
             let _ = out.push(byte as char);
         }
     }
+}
+
+fn parse_modem_clock(value: &str) -> Option<[u8; 6]> {
+    let text = value.trim().trim_matches('"');
+    let comma = text.find(',')?;
+    let date = &text[..comma];
+    let time = &text[comma + 1..];
+
+    let date_bytes = date.as_bytes();
+    let year_offset = if date_bytes.get(2) == Some(&b'/') {
+        0
+    } else if date_bytes.get(4) == Some(&b'/') {
+        2
+    } else {
+        return None;
+    };
+
+    let year = parse_two_digits(&date_bytes[year_offset..])?;
+    let month = parse_two_digits(date_bytes.get(year_offset + 3..year_offset + 5)?)?;
+    let day = parse_two_digits(date_bytes.get(year_offset + 6..year_offset + 8)?)?;
+
+    let time_bytes = time.as_bytes();
+    let hour = parse_two_digits(time_bytes.get(0..2)?)?;
+    let minute = parse_two_digits(time_bytes.get(3..5)?)?;
+    let second = parse_two_digits(time_bytes.get(6..8)?)?;
+
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 || second > 59 {
+        return None;
+    }
+
+    Some([year, month, day, hour, minute, second])
+}
+
+fn parse_two_digits(bytes: &[u8]) -> Option<u8> {
+    if bytes.len() < 2 || !bytes[0].is_ascii_digit() || !bytes[1].is_ascii_digit() {
+        return None;
+    }
+    Some((bytes[0] - b'0') * 10 + (bytes[1] - b'0'))
 }
 
 async fn run_optional_at_diag(uart: &mut DmaUart<'_>, cmd: &str) {

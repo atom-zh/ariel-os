@@ -1,7 +1,11 @@
+use core::cell::RefCell;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
+use critical_section::Mutex;
 
 static DEVICE_ID_FROM_IMEI: AtomicU32 = AtomicU32::new(0);
 static DEVICE_ID_FROM_IMEI_SET: AtomicBool = AtomicBool::new(false);
+static REPORT_TIME: Mutex<RefCell<Option<[u8; 6]>>> = Mutex::new(RefCell::new(None));
 
 pub(crate) fn set_device_id_from_imei(imei: &str) -> Option<u32> {
     let mut last_digits = [0u8; 8];
@@ -37,6 +41,16 @@ pub(crate) fn device_id_from_imei() -> Option<u32> {
     } else {
         None
     }
+}
+
+pub(crate) fn set_report_time(time: [u8; 6]) {
+    critical_section::with(|cs| {
+        *REPORT_TIME.borrow(cs).borrow_mut() = Some(time);
+    });
+}
+
+pub(crate) fn report_time() -> Option<[u8; 6]> {
+    critical_section::with(|cs| *REPORT_TIME.borrow(cs).borrow())
 }
 
 fn parse_radix_u32(bytes: &[u8], radix: u32) -> Option<u32> {
